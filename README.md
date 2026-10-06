@@ -56,6 +56,25 @@ DETECTOR = "hybrid"
 
 ---
 
+## Interactive Map & Geospatial Kit
+
+UrbanLens uses **100% free, key-less geospatial libraries and tile servers**:
+
+- **Engine:** Folium (Leaflet) + `streamlit-folium` + Branca.
+- **Base Layers (Switchable via Layer Control in top right):**
+  - **Light (Default):** CARTO Positron (`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png`)
+  - **Streets:** OpenStreetMap Standard (`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`)
+  - **Dark:** CARTO Dark Matter (`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png`)
+  - **Satellite (Optional):** Esri World Imagery (`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/...`)
+- **Attribution & Usage Terms:** All tile layers include legal attribution links (`OpenStreetMap contributors`, `CARTO`, `Esri`). Review tile provider terms for high-volume or commercial usage.
+- **Nominatim Reverse Geocoding Policy:** Identified with custom User-Agent in `config.py`, cached in SQLite `geo_cache`, with a strict 1 request/second rate limiter.
+- **Marker Styling & XSS Safety:** Circle markers colored by severity with radius scaled by priority (6 to 16 px); interactive popups with embedded base64 thumbnails and HTML-escaped text.
+- **Toggles:** Dynamic Marker Clustering (`MarkerCluster`, auto-enabled when > 40 issues), Priority Heatmap (`HeatMap`), and Simple Scatter View fallback for slow connections.
+- **Click-to-Pick Geotagging:** Draggable / click-to-pick interactive pin on the Report Issue page synced with coordinate inputs and nearest landmark multiplier feedback.
+- **Custom City & Wards:** To customize, edit `DEFAULT_LAT`, `DEFAULT_LON`, and `DEFAULT_CITY` in `core/config.py`. Optional ward boundary polygons can be placed at `data/wards.geojson`.
+
+---
+
 ## Demo Credentials
 
 | Role    | Username  | Password    | Permissions & Capabilities |

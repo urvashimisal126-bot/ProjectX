@@ -58,7 +58,18 @@ LANDMARKS: list[dict] = [
 # ─── Default location (Indore) ────────────────────────────────────────────────
 DEFAULT_LAT = 22.7196
 DEFAULT_LON = 75.8577
+DEFAULT_ZOOM = 12
 DEFAULT_CITY = "Indore, Madhya Pradesh"
+
+# Map bounding box validation (Indore metropolitan region)
+MAP_BOUNDS_LAT = (22.0, 23.5)
+MAP_BOUNDS_LON = (75.0, 76.5)
+
+# Map Layer & Geocoding Configuration
+NOMINATIM_USER_AGENT = "UrbanLens Civic Platform (https://github.com/urvashimisal126-bot/ProjectX)"
+ENABLE_SATELLITE_LAYER = True
+MAP_MAX_MARKERS = 1000
+WARDS_GEOJSON_PATH = "data/wards.geojson"
 
 # ─── Areas in Indore ─────────────────────────────────────────────────────────
 INDORE_AREAS: list[str] = [

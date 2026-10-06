@@ -188,29 +188,104 @@ def render() -> None:
             )
 
     # ── Location ──────────────────────────────────────────────────────────────
-    st.markdown(f'<div style="font-size:14px;font-weight:700;color:{TOKENS["navy"]};margin:1.25rem 0 0.5rem">Location</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:14px;font-weight:700;color:{TOKENS["navy"]};margin:1.25rem 0 0.5rem">Geotag & Location Picker</div>', unsafe_allow_html=True)
 
     gps = extract_gps(file_path_saved) if not st.session_state.get("report_is_video") else None
 
+    # Default lat/lon
+    if "report_lat" not in st.session_state:
+        st.session_state["report_lat"] = gps[0] if gps else DEFAULT_LAT
+    if "report_lon" not in st.session_state:
+        st.session_state["report_lon"] = gps[1] if gps else DEFAULT_LON
+
     if gps:
-        lat_val, lon_val = gps
-        st.success(f"GPS extracted from photo metadata: {lat_val:.5f}, {lon_val:.5f}")
+        st.success(f"GPS extracted from photo metadata: {gps[0]:.5f}, {gps[1]:.5f}")
     else:
-        st.info("No EXIF GPS found in image. Please provide coordinates or use the Indore defaults.")
-        c_lat, c_lon = st.columns(2)
-        with c_lat:
-            lat_val = st.number_input("Latitude", value=DEFAULT_LAT, format="%.5f", key="lat_input")
-        with c_lon:
-            lon_val = st.number_input("Longitude", value=DEFAULT_LON, format="%.5f", key="lon_input")
+        st.info("Click anywhere on the interactive map below or enter coordinates manually to set the hazard pin.")
+
+    # Location Inputs
+    c_lat, c_lon = st.columns(2)
+    with c_lat:
+        lat_val = st.number_input(
+            "Latitude",
+            value=float(st.session_state["report_lat"]),
+            format="%.5f",
+            key="report_lat_input",
+        )
+    with c_lon:
+        lon_val = st.number_input(
+            "Longitude",
+            value=float(st.session_state["report_lon"]),
+            format="%.5f",
+            key="report_lon_input",
+        )
+
+    # Mini Click-to-Pick Folium Map
+    import folium
+    from streamlit_folium import st_folium
+    from core.geo import get_location_type, validate_coordinates, reverse_geocode_area
+
+    picker_map = folium.Map(
+        location=[lat_val, lon_val],
+        zoom_start=14,
+        tiles="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        attr='&copy; OpenStreetMap contributors &copy; CARTO',
+    )
+    folium.Marker(
+        [lat_val, lon_val],
+        popup="Hazard Location",
+        tooltip="Selected Hazard Pin",
+        icon=folium.Icon(color="red", icon="info-sign"),
+    ).add_to(picker_map)
+
+    picker_out = st_folium(
+        picker_map,
+        width="100%",
+        height=260,
+        key="report_picker_map",
+        returned_objects=["last_clicked"],
+    )
+
+    if picker_out and picker_out.get("last_clicked"):
+        clicked_coord = picker_out["last_clicked"]
+        if (
+            clicked_coord.get("lat")
+            and (clicked_coord["lat"] != st.session_state["report_lat"] or clicked_coord["lng"] != st.session_state["report_lon"])
+        ):
+            st.session_state["report_lat"] = clicked_coord["lat"]
+            st.session_state["report_lon"] = clicked_coord["lng"]
+            st.rerun()
+
+    # Landmark Proximity & Multiplier Feedback
+    loc_type = get_location_type(lat_val, lon_val)
+    multiplier_val = 1.5 if loc_type in ["school", "hospital"] else (1.3 if loc_type == "highway" else 1.0)
+    st.markdown(
+        f"""
+        <div style="background:#FAFBFD;border:1px solid {TOKENS['border']};border-radius:6px;padding:6px 12px;font-size:12px;margin:8px 0;display:flex;justify-content:space-between;align-items:center">
+          <span>Proximity Category: <strong>{loc_type.upper()}</strong></span>
+          <span>Priority Multiplier: <strong style="color:{TOKENS['deep_teal']}">×{multiplier_val}</strong></span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     from core.config import INDORE_AREAS  # noqa: PLC0415
-    area = st.selectbox("Area / Neighbourhood", options=[""] + INDORE_AREAS, index=0)
+    auto_area = reverse_geocode_area(lat_val, lon_val)
+    area = st.selectbox(
+        "Area / Neighbourhood",
+        options=["Auto-detected (" + auto_area + ")"] + INDORE_AREAS,
+        index=0,
+    )
+    final_area = auto_area if area.startswith("Auto-detected") else area
 
     # ── Submit ────────────────────────────────────────────────────────────────
     st.markdown(f'<div style="margin-top:1.25rem"></div>', unsafe_allow_html=True)
 
     if st.button("Submit Report to Queue", key="submit_report_btn", type="primary"):
-        loc_type = get_location_type(lat_val, lon_val)
+        if not validate_coordinates(lat_val, lon_val):
+            st.error("Invalid coordinates. Please pick a location on the map.")
+            return
+
         priority = compute_priority(score, loc_type, 1)
 
         # Check for duplicate
@@ -232,7 +307,7 @@ def render() -> None:
                 "priority":       priority,
                 "lat":            lat_val,
                 "lon":            lon_val,
-                "area":           area or "Unknown",
+                "area":           final_area or "Indore",
                 "location_type":  loc_type,
                 "image_path":     file_path_saved,
                 "confidence":     eff_conf,

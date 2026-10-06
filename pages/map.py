@@ -1,155 +1,168 @@
-"""Live Map page — full-width Folium map with filters."""
+"""Live Map page — interactive Folium map with clustering, heatmaps, layer switches, and backend RBAC."""
 from __future__ import annotations
 
 import streamlit as st
+import pandas as pd
+import plotly.express as px
+from streamlit_folium import st_folium
 
 from core.auth import current_user
-from core.config import DEFAULT_LAT, DEFAULT_LON, ISSUE_CLASSES, ISSUE_LABELS, INDORE_AREAS
-from core.db import list_issues
+from core.config import DEFAULT_LAT, DEFAULT_LON, DEFAULT_ZOOM, ISSUE_CLASSES, ISSUE_LABELS, INDORE_AREAS
+from core.db import get_map_issues
+from core.mapkit import build_map, SEV_MARKER_COLORS
 from ui.components import page_header, empty_state
 from ui.theme import TOKENS
-
-
-_SEV_COLOR = {"High": "#C8372D", "Medium": "#E08A1E", "Low": "#2E9E6B"}
-_SEV_RADIUS = {"High": 12, "Medium": 9, "Low": 7}
 
 
 def render() -> None:
     user = current_user()
 
-    page_header("Live Map", "Real-time geotag view of all reported infrastructure issues.", live=True)
+    page_header("Live Map", "Real-time interactive geospatial monitor for municipal infrastructure hazards.", live=True)
 
-    # ── Filter sidebar ────────────────────────────────────────────────────────
-    with st.sidebar:
-        st.markdown(
-            f'<div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.5);'
-            f'text-transform:uppercase;letter-spacing:0.05em;margin:1rem 0 0.5rem">Map Filters</div>',
-            unsafe_allow_html=True,
-        )
+    # ── Top Filter Bar ────────────────────────────────────────────────────────
+    f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 2])
+    with f_col1:
         sel_type = st.multiselect(
-            "Issue type",
+            "Hazard Type",
             options=ISSUE_CLASSES,
             format_func=lambda x: ISSUE_LABELS.get(x, x),
-            key="map_type_filter",
+            key="live_map_type_filter",
         )
+    with f_col2:
         sel_sev = st.multiselect(
             "Severity",
             options=["High", "Medium", "Low"],
-            key="map_sev_filter",
+            key="live_map_sev_filter",
         )
+    with f_col3:
         sel_status = st.multiselect(
             "Status",
             options=["reported", "assigned", "fixed"],
-            key="map_status_filter",
+            key="live_map_status_filter",
+        )
+    with f_col4:
+        sel_area = st.selectbox(
+            "Area Filter",
+            options=["All Areas"] + INDORE_AREAS,
+            index=0,
+            key="live_map_area_filter",
         )
 
-    # ── Load issues ───────────────────────────────────────────────────────────
-    filters = {}
-    if sel_type:    filters["type"] = sel_type
-    if sel_sev:     filters["severity_label"] = sel_sev
-    if sel_status:  filters["status"] = sel_status
+    # ── Map Control Options Bar ───────────────────────────────────────────────
+    c_col1, c_col2, c_col3, c_col4, c_col5 = st.columns([2, 2, 2, 2, 2])
+    with c_col1:
+        cluster_toggle = st.toggle("Cluster Markers", value=False, key="map_cluster_toggle")
+    with c_col2:
+        heatmap_toggle = st.toggle("Priority Heatmap", value=False, key="map_heat_toggle")
+    with c_col3:
+        show_fixed_toggle = st.toggle("Show Fixed", value=True, key="map_fixed_toggle")
+    with c_col4:
+        satellite_toggle = st.toggle("Satellite Layer", value=True, key="map_sat_toggle")
+    with c_col5:
+        simple_view_toggle = st.toggle("Simple Scatter View", value=False, key="map_simple_toggle")
 
-    issues = list_issues(user, filters)
-    geo_issues = [i for i in issues if i.get("lat") and i.get("lon")]
+    # ── Load data via backend RBAC ────────────────────────────────────────────
+    filters = {}
+    if sel_type:
+        filters["type"] = sel_type
+    if sel_sev:
+        filters["severity_label"] = sel_sev
+    if sel_status:
+        filters["status"] = sel_status
+    if sel_area and sel_area != "All Areas":
+        filters["area"] = sel_area
+
+    issues = get_map_issues(user, filters)
 
     st.markdown(
-        f'<div style="font-size:13px;color:{TOKENS["muted"]};margin-bottom:0.75rem">'
-        f'Showing <strong>{len(geo_issues)}</strong> geotagged issues'
-        + (" (use filters to narrow down)" if len(issues) > len(geo_issues) else "")
-        + "</div>",
+        f'<div style="font-size:12px;color:{TOKENS["muted"]};margin-bottom:0.75rem">'
+        f'Displaying <strong>{len(issues)}</strong> geotagged hazards across Indore · '
+        f'<span style="color:{TOKENS["deep_teal"]}">Layer control in top-right of map</span></div>',
         unsafe_allow_html=True,
     )
 
-    if not geo_issues:
-        empty_state("No issues on map", "No geotagged issues match the current filters.")
+    if not issues:
+        empty_state("No hazards match filters", "Try selecting different hazard types, severities, or areas.")
         return
 
-    # ── Build Folium map ──────────────────────────────────────────────────────
-    try:
-        import folium  # noqa: PLC0415
-        from streamlit_folium import st_folium  # noqa: PLC0415
-        from pathlib import Path  # noqa: PLC0415
-        import base64  # noqa: PLC0415
-        import os  # noqa: PLC0415
+    # ── Fallback Simple View (Plotly Scatter) ──────────────────────────────────
+    if simple_view_toggle:
+        st.info("Showing lightweight coordinate scatter view.")
+        df_map = pd.DataFrame(issues)
+        df_map["label"] = df_map["type"].map(lambda x: ISSUE_LABELS.get(x, x))
+        fig = px.scatter(
+            df_map,
+            x="lon",
+            y="lat",
+            color="severity_label",
+            size="priority",
+            hover_name="label",
+            hover_data={"lat": ":.4f", "lon": ":.4f", "area": True, "status": True, "priority": ":.2f"},
+            color_discrete_map=SEV_MARKER_COLORS,
+            title="UrbanLens Issues Geographic Distribution",
+        )
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#F5F7FA",
+            height=600,
+            font=dict(family="Inter", color="#0B2545"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        return
 
-        m = folium.Map(
-            location=[DEFAULT_LAT, DEFAULT_LON],
-            zoom_start=12,
-            tiles="CartoDB positron",
+    # ── Render Interactive Folium Map ─────────────────────────────────────────
+    try:
+        # Check auto-cluster rule (>40 items)
+        auto_cluster = cluster_toggle or (len(issues) > 40)
+
+        # Center map
+        avg_lat = sum(i["lat"] for i in issues) / len(issues) if issues else DEFAULT_LAT
+        avg_lon = sum(i["lon"] for i in issues) / len(issues) if issues else DEFAULT_LON
+
+        folium_map = build_map(
+            issues=issues,
+            center=(avg_lat, avg_lon),
+            zoom=DEFAULT_ZOOM,
+            cluster=auto_cluster,
+            show_heatmap=heatmap_toggle,
+            show_fixed=show_fixed_toggle,
+            enable_satellite=satellite_toggle,
+            compact=False,
         )
 
-        for iss in geo_issues:
-            color = _SEV_COLOR.get(iss["severity_label"], "#5B6B7F")
-            radius = _SEV_RADIUS.get(iss["severity_label"], 8)
+        map_output = st_folium(
+            folium_map,
+            width="100%",
+            height=660,
+            key="urbanlens_live_folium_map",
+            returned_objects=["last_object_clicked", "last_clicked"],
+        )
 
-            # Thumbnail HTML
-            img_html = ""
-            img_path = iss.get("image_path", "")
-            if img_path and Path(img_path).exists():
-                try:
-                    with open(img_path, "rb") as f:
-                        b64 = base64.b64encode(f.read()).decode()
-                    img_html = f'<img src="data:image/jpeg;base64,{b64}" width="200" style="border-radius:4px;margin-bottom:8px"><br>'
-                except Exception:
-                    pass
-
-            popup_html = f"""
-            <div style="font-family:sans-serif;min-width:220px">
-              {img_html}
-              <strong style="font-size:14px">#{iss['id']} {iss['type'].replace('_',' ').title()}</strong><br>
-              <span style="color:#5B6B7F;font-size:12px">{iss.get('area','')}</span><br><br>
-              <table style="font-size:12px;width:100%">
-                <tr><td style="color:#5B6B7F">Severity</td><td><strong>{iss['severity_label']}</strong></td></tr>
-                <tr><td style="color:#5B6B7F">Priority</td><td><strong>{iss['priority']:.3f}</strong></td></tr>
-                <tr><td style="color:#5B6B7F">Status</td><td><strong>{iss['status'].capitalize()}</strong></td></tr>
-              </table>
-            </div>
-            """
-
-            folium.CircleMarker(
-                location=[iss["lat"], iss["lon"]],
-                radius=radius,
-                color="#fff",
-                weight=2,
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.9,
-                popup=folium.Popup(popup_html, max_width=260),
-                tooltip=f'#{iss["id"]} {iss["type"]} — {iss["severity_label"]}',
-            ).add_to(m)
-
-        # Legend
-        legend_html = """
-        <div style="position:fixed;bottom:30px;right:30px;background:#fff;
-                    border:1px solid #E3E8EF;border-radius:8px;padding:12px;
-                    font-family:sans-serif;font-size:12px;z-index:9999">
-          <div style="font-weight:700;margin-bottom:6px;color:#0B2545">Severity</div>
-          <div><span style="display:inline-block;width:12px;height:12px;background:#C8372D;border-radius:50%;margin-right:6px"></span>High</div>
-          <div><span style="display:inline-block;width:10px;height:10px;background:#E08A1E;border-radius:50%;margin-right:6px"></span>Medium</div>
-          <div><span style="display:inline-block;width:8px;height:8px;background:#2E9E6B;border-radius:50%;margin-right:6px"></span>Low</div>
-        </div>
-        """
-        m.get_root().html.add_child(folium.Element(legend_html))
-
-        map_data = st_folium(m, height=560, use_container_width=True, returned_objects=["last_object_clicked"])
-
-        # Issue detail navigation on click
-        clicked = (map_data or {}).get("last_object_clicked")
-        if clicked:
-            click_lat = clicked.get("lat")
-            click_lng = clicked.get("lng")
-            if click_lat and click_lng:
+        # Handle marker interaction
+        if map_output and map_output.get("last_object_clicked"):
+            clicked = map_output["last_object_clicked"]
+            c_lat = clicked.get("lat")
+            c_lng = clicked.get("lng")
+            if c_lat and c_lng:
                 # Find closest issue
-                from core.geo import haversine  # noqa: PLC0415
-                closest = min(
-                    geo_issues,
-                    key=lambda i: haversine(click_lat, click_lng, i["lat"], i["lon"]),
+                matched = min(
+                    issues,
+                    key=lambda i: (i["lat"] - c_lat) ** 2 + (i["lon"] - c_lng) ** 2,
                 )
-                st.info(f"Clicked near Issue #{closest['id']} — {closest['type'].replace('_',' ').title()} in {closest['area']}.")
-                if st.button(f"View Issue #{closest['id']} Detail", key="map_view_detail"):
-                    st.session_state["detail_issue_id"] = closest["id"]
-                    st.session_state["goto_page"] = "detail"
-                    st.rerun()
+                st.markdown(
+                    f"""
+                    <div style="background:#fff;border:1px solid {TOKENS['border']};border-radius:8px;padding:0.75rem 1rem;margin-top:0.75rem;display:flex;justify-content:space-between;align-items:center">
+                      <div>
+                        <strong>Selected: #{matched['id']} {ISSUE_LABELS.get(matched['type'], matched['type'])}</strong> — {matched.get('area','Unknown')} · Priority {matched.get('priority',0):.2f}
+                      </div>
+                      <a href="javascript:void(0)" onclick="" style="color:{TOKENS['deep_teal']};font-weight:600;text-decoration:none">View details in Issue Detail tab</a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-    except ImportError as e:
-        st.error(f"Map library not available: {e}. Run: pip install folium streamlit-folium")
+    except Exception as exc:
+        st.warning(f"Interactive Leaflet map encountered a rendering error: {exc}. Displaying fallback view.")
+        df_map = pd.DataFrame(issues)
+        fig = px.scatter(df_map, x="lon", y="lat", color="severity_label", color_discrete_map=SEV_MARKER_COLORS)
+        st.plotly_chart(fig, use_container_width=True)

@@ -144,6 +144,12 @@ def init_db() -> None:
             created_at  TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS geo_cache (
+            cache_key   TEXT PRIMARY KEY,
+            area_name   TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_issues_status       ON issues(status);
         CREATE INDEX IF NOT EXISTS idx_issues_severity     ON issues(severity_label);
         CREATE INDEX IF NOT EXISTS idx_issues_type         ON issues(type);
@@ -309,6 +315,47 @@ def list_issues(
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_map_issues(actor: dict | None, filters: dict | None = None) -> list[dict]:
+    """
+    Fetch issues for map display with backend-enforced RBAC field filtering.
+    Guest & Citizen users receive public operational fields only (no reporter or assignee info).
+    """
+    require_permission(actor, "view_public_map")
+    role = (actor or {}).get("role", "guest")
+
+    raw_issues = list_issues(actor=actor if role in ["admin", "officer"] else None, filters=filters)
+    # Filter to only issues with valid geographical coordinates
+    geo_issues = [i for i in raw_issues if i.get("lat") is not None and i.get("lon") is not None]
+
+    if role in ["admin", "officer"]:
+        return geo_issues
+
+    # Redact sensitive fields for Citizen and Guest roles
+    sanitized: list[dict] = []
+    for item in geo_issues:
+        sanitized.append({
+            "id": item["id"],
+            "type": item["type"],
+            "severity_score": item["severity_score"],
+            "severity_label": item["severity_label"],
+            "priority": item["priority"],
+            "lat": item["lat"],
+            "lon": item["lon"],
+            "area": item.get("area", ""),
+            "location_type": item.get("location_type", "default"),
+            "image_path": item.get("image_path", ""),
+            "report_count": item.get("report_count", 1),
+            "status": item["status"],
+            "created_at": item["created_at"],
+            "updated_at": item["updated_at"],
+            # Redacted fields
+            "reported_by": None,
+            "assigned_to": None,
+            "ai_assessment": item.get("ai_assessment"),
+        })
+    return sanitized
 
 
 def update_issue_status(actor: dict, issue_id: int, new_status: str, assigned_to: str | None = None) -> None:

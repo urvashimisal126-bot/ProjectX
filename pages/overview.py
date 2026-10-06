@@ -16,31 +16,10 @@ from ui.theme import TOKENS
 def _mini_map_preview(issues: list[dict]) -> None:
     """Render a compact folium map preview."""
     try:
-        import folium  # noqa: PLC0415
-        from streamlit_folium import st_folium  # noqa: PLC0415
-        from core.config import DEFAULT_LAT, DEFAULT_LON  # noqa: PLC0415
-
-        m = folium.Map(
-            location=[DEFAULT_LAT, DEFAULT_LON],
-            zoom_start=12,
-            tiles="CartoDB positron",
-            width="100%",
-        )
-        _SEV_HEX = {"High": "#C8372D", "Medium": "#E08A1E", "Low": "#2E9E6B"}
-        for iss in issues[:50]:
-            if iss.get("lat") and iss.get("lon"):
-                folium.CircleMarker(
-                    location=[iss["lat"], iss["lon"]],
-                    radius=7,
-                    color="#fff",
-                    weight=2,
-                    fill=True,
-                    fill_color=_SEV_HEX.get(iss["severity_label"], "#5B6B7F"),
-                    fill_opacity=0.85,
-                    tooltip=f'{iss["type"]} · {iss["severity_label"]}',
-                ).add_to(m)
-
-        st_folium(m, height=260, use_container_width=True, returned_objects=[])
+        from core.mapkit import build_map
+        from streamlit_folium import st_folium
+        m = build_map(issues[:40], compact=True)
+        st_folium(m, height=280, width="100%", returned_objects=[], key="overview_mini_map")
     except Exception as e:
         st.info(f"Map preview unavailable: {e}")
 
