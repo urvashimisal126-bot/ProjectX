@@ -43,7 +43,7 @@ TILES_CONFIG = {
         "name": "Streets (OpenStreetMap)",
         "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         "sample_url": "https://tile.openstreetmap.org/1/0/0.png",
-        "attr": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        "attr": " ",
         "subdomains": "abc",
         "max_zoom": 19,
     },
@@ -51,7 +51,7 @@ TILES_CONFIG = {
         "name": "Esri World Street Map",
         "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
         "sample_url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/1/0/0",
-        "attr": "Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012",
+        "attr": " ",
         "subdomains": "abc",
         "max_zoom": 19,
     },
@@ -59,7 +59,7 @@ TILES_CONFIG = {
         "name": "Satellite (Esri Imagery)",
         "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "sample_url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/1/0/0",
-        "attr": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and GIS User Community",
+        "attr": " ",
         "subdomains": "abc",
         "max_zoom": 19,
     },
@@ -67,7 +67,7 @@ TILES_CONFIG = {
         "name": "Topographic (OpenTopoMap)",
         "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
         "sample_url": "https://a.tile.opentopomap.org/1/0/0.png",
-        "attr": 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+        "attr": " ",
         "subdomains": "abc",
         "max_zoom": 17,
     },
@@ -223,10 +223,9 @@ def _add_legend(m: folium.Map) -> None:
       <div style="margin-bottom:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#C8372D;margin-right:6px"></span>High Severity</div>
       <div style="margin-bottom:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E08A1E;margin-right:6px"></span>Medium Severity</div>
       <div style="margin-bottom:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2E9E6B;margin-right:6px"></span>Low Severity</div>
-      <div style="margin-bottom:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1B9C85;margin-right:6px"></span>Fixed / Resolved</div>
+      <div style="margin-bottom:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1B9C85;margin-right:6px"></span>Fixed / Resolved</div>
       <div style="font-size:10px;color:#5B6B7F;border-top:1px solid #E3E8EF;padding-top:4px">
-        Marker size = Priority score<br>
-        Tiles &copy; OpenStreetMap/Esri
+        Marker size = Priority
       </div>
     </div>
     """
@@ -263,7 +262,18 @@ def build_map(
         attr=base_cfg["attr"],
         name=base_cfg["name"],
         control_scale=True,
+        attribution_control=False,
     )
+
+    # Injected CSS to guarantee zero attribution watermark overlay in iframes
+    m.get_root().header.add_child(Element("""
+    <style>
+    .leaflet-control-attribution {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    </style>
+    """))
 
     # Add other healthy tile layers for user switcher
     for key, cfg in healthy_tiles.items():

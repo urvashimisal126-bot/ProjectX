@@ -221,6 +221,7 @@ def render() -> None:
 
     # Mini Click-to-Pick Folium Map
     import folium
+    from branca.element import Element
     from streamlit_folium import st_folium
     from core.geo import get_location_type, validate_coordinates, reverse_geocode_area
 
@@ -228,8 +229,17 @@ def render() -> None:
         location=[lat_val, lon_val],
         zoom_start=14,
         tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        attr=" ",
+        attribution_control=False,
     )
+    picker_map.get_root().header.add_child(Element("""
+    <style>
+    .leaflet-control-attribution {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    </style>
+    """))
     folium.Marker(
         [lat_val, lon_val],
         popup="Hazard Location",

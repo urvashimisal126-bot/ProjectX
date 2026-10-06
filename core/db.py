@@ -19,16 +19,16 @@ _PERMISSIONS: dict[str, set[str]] = {
     "admin":   {
         "view_public_map", "upload_report", "view_queue", "assign_status",
         "view_analytics", "view_audit", "manage_users", "export_csv",
-        "view_own_reports", "view_issue_detail", "add_comment",
+        "view_own_reports", "view_issue_detail", "add_comment", "manage_credits",
     },
     "officer": {
         "view_public_map", "upload_report", "view_queue", "assign_status",
         "view_analytics", "export_csv", "view_own_reports",
-        "view_issue_detail", "add_comment",
+        "view_issue_detail", "add_comment", "verify_report",
     },
     "citizen": {
         "view_public_map", "upload_report", "view_own_reports",
-        "view_issue_detail", "add_comment",
+        "view_issue_detail", "add_comment", "view_leaderboard",
     },
     "guest":   {"view_public_map"},
 }
@@ -87,6 +87,9 @@ def init_db() -> None:
             password_hash TEXT  NOT NULL,
             role        TEXT    NOT NULL DEFAULT 'citizen',
             active      INTEGER NOT NULL DEFAULT 1,
+            show_on_leaderboard INTEGER NOT NULL DEFAULT 1,
+            strikes     INTEGER NOT NULL DEFAULT 0,
+            rewards_suspended INTEGER NOT NULL DEFAULT 0,
             created_at  TEXT    NOT NULL
         );
 
@@ -105,6 +108,13 @@ def init_db() -> None:
             status          TEXT    NOT NULL DEFAULT 'reported',
             assigned_to     TEXT    DEFAULT NULL,
             reported_by     TEXT    NOT NULL DEFAULT '',
+            ai_assessment   TEXT    DEFAULT NULL,
+            ai_model        TEXT    DEFAULT NULL,
+            detector_source TEXT    DEFAULT 'yolo',
+            verification_status TEXT NOT NULL DEFAULT 'unverified',
+            verified_by     TEXT    DEFAULT NULL,
+            verified_at     TEXT    DEFAULT NULL,
+            reject_reason   TEXT    DEFAULT NULL,
             created_at      TEXT    NOT NULL,
             updated_at      TEXT    NOT NULL
         );
@@ -136,6 +146,26 @@ def init_db() -> None:
             timestamp   TEXT    NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS credit_ledger (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            delta       INTEGER NOT NULL,
+            reason_code TEXT    NOT NULL,
+            issue_id    INTEGER REFERENCES issues(id),
+            note        TEXT    DEFAULT '',
+            created_by  TEXT    NOT NULL DEFAULT 'system',
+            created_at  TEXT    NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS badges (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            badge_key   TEXT    NOT NULL,
+            awarded_at  TEXT    NOT NULL,
+            metadata    TEXT    DEFAULT '{}',
+            UNIQUE(user_id, badge_key)
+        );
+
         CREATE TABLE IF NOT EXISTS gemini_cache (
             cache_key   TEXT PRIMARY KEY,
             model       TEXT NOT NULL,
@@ -156,16 +186,38 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_issues_created      ON issues(created_at);
         CREATE INDEX IF NOT EXISTS idx_audit_timestamp     ON audit_log(timestamp);
         CREATE INDEX IF NOT EXISTS idx_audit_user          ON audit_log(user);
+        CREATE INDEX IF NOT EXISTS idx_credit_user         ON credit_ledger(user_id);
+        CREATE INDEX IF NOT EXISTS idx_credit_created      ON credit_ledger(created_at);
+        CREATE INDEX IF NOT EXISTS idx_badges_user         ON badges(user_id);
         """)
 
         # Schema migrations for existing DB
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(issues)").fetchall()]
-        if "ai_assessment" not in cols:
+        issue_cols = [r["name"] for r in conn.execute("PRAGMA table_info(issues)").fetchall()]
+        if "ai_assessment" not in issue_cols:
             conn.execute("ALTER TABLE issues ADD COLUMN ai_assessment TEXT DEFAULT NULL")
-        if "ai_model" not in cols:
+        if "ai_model" not in issue_cols:
             conn.execute("ALTER TABLE issues ADD COLUMN ai_model TEXT DEFAULT NULL")
-        if "detector_source" not in cols:
+        if "detector_source" not in issue_cols:
             conn.execute("ALTER TABLE issues ADD COLUMN detector_source TEXT DEFAULT 'yolo'")
+        if "verification_status" not in issue_cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'unverified'")
+        if "verified_by" not in issue_cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN verified_by TEXT DEFAULT NULL")
+        if "verified_at" not in issue_cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN verified_at TEXT DEFAULT NULL")
+        if "reject_reason" not in issue_cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN reject_reason TEXT DEFAULT NULL")
+
+        user_cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "show_on_leaderboard" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN show_on_leaderboard INTEGER NOT NULL DEFAULT 1")
+        if "strikes" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN strikes INTEGER NOT NULL DEFAULT 0")
+        if "rewards_suspended" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN rewards_suspended INTEGER NOT NULL DEFAULT 0")
+
+        # Now safe to create index on migration column
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_issues_verification ON issues(verification_status)")
 
 
 def db_is_empty() -> bool:
@@ -185,6 +237,32 @@ def get_user(username: str) -> dict | None:
         return dict(row) if row else None
 
 
+def get_user_by_id(uid: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE id=? AND active=1", (uid,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def update_user_privacy(user_id: int, show_on_leaderboard: bool) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET show_on_leaderboard=? WHERE id=?",
+            (1 if show_on_leaderboard else 0, user_id),
+        )
+
+
+def update_user_strikes(actor: dict, user_id: int, strikes: int, rewards_suspended: bool) -> None:
+    if not (has_permission(actor, "manage_users") or has_permission(actor, "verify_report")):
+        raise PermissionError("Not authorized to update user strikes.")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET strikes=?, rewards_suspended=? WHERE id=?",
+            (strikes, 1 if rewards_suspended else 0, user_id),
+        )
+
+
 def create_user(
     actor: dict, username: str, name: str,
     password_hash: str, role: str
@@ -193,8 +271,8 @@ def create_user(
     now = _now()
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO users (username,name,password_hash,role,active,created_at)"
-            " VALUES (?,?,?,?,1,?)",
+            "INSERT INTO users (username,name,password_hash,role,active,show_on_leaderboard,strikes,rewards_suspended,created_at)"
+            " VALUES (?,?,?,?,1,1,0,0,?)",
             (username, name, password_hash, role, now),
         )
         return cur.lastrowid
@@ -514,8 +592,166 @@ def sparkline_data(days: int = 14) -> list[int]:
     return [counts.get(str(today - timedelta(days=i)), 0) for i in range(days - 1, -1, -1)]
 
 
+# ─── Verification & Credits helpers ──────────────────────────────────────────
+
+def verify_issue_db(actor: dict, issue_id: int) -> dict:
+    """Verify an issue in the database. Checks permissions and self-verification."""
+    require_permission(actor, "verify_report")
+    actor_user = actor.get("username", "")
+    now = _now()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Issue #{issue_id} not found.")
+        issue = dict(row)
+        if issue.get("reported_by") == actor_user:
+            raise ValueError("Officers cannot verify their own reports.")
+        conn.execute(
+            "UPDATE issues SET verification_status='verified', verified_by=?, verified_at=?, reject_reason=NULL, updated_at=? WHERE id=?",
+            (actor_user, now, now, issue_id),
+        )
+        updated = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
+        return dict(updated)
+
+
+def reject_issue_db(actor: dict, issue_id: int, reason: str) -> dict:
+    """Reject an issue with a required reason."""
+    require_permission(actor, "verify_report")
+    if not reason or not reason.strip():
+        raise ValueError("A reason is required when rejecting a report.")
+    actor_user = actor.get("username", "")
+    now = _now()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Issue #{issue_id} not found.")
+        conn.execute(
+            "UPDATE issues SET verification_status='rejected', verified_by=?, verified_at=?, reject_reason=?, updated_at=? WHERE id=?",
+            (actor_user, now, reason.strip(), now, issue_id),
+        )
+        updated = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
+        return dict(updated)
+
+
+def add_credit_ledger_entry(
+    user_id: int, delta: int, reason_code: str,
+    issue_id: int | None = None, note: str = "",
+    created_by: str = "system"
+) -> int:
+    """Insert an append-only transaction into credit_ledger."""
+    now = _now()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO credit_ledger (user_id, delta, reason_code, issue_id, note, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, delta, reason_code, issue_id, note, created_by, now),
+        )
+        return cur.lastrowid
+
+
+def get_user_credits_balance(user_id: int) -> int:
+    """Return current net credits for user."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(delta), 0) as balance FROM credit_ledger WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        return int(row["balance"]) if row else 0
+
+
+def get_user_credit_ledger(user_id: int, limit: int = 50) -> list[dict]:
+    """Return transaction history for user."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM credit_ledger WHERE user_id=? ORDER BY created_at DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_user_daily_credits_count(user_id: int, date_str: str | None = None) -> int:
+    """Return count of verified report rewards earned on given date (default today)."""
+    with get_conn() as conn:
+        target_date = date_str or "now"
+        clause = "date(created_at) = date('now')" if not date_str else "date(created_at) = date(?)"
+        params = [user_id] if not date_str else [user_id, date_str]
+        row = conn.execute(
+            f"SELECT COUNT(*) as n FROM credit_ledger WHERE user_id=? AND delta > 0 AND reason_code='REPORT_VERIFIED' AND {clause}",
+            params,
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+
+def award_badge_db(user_id: int, badge_key: str, metadata_json: str = "{}") -> bool:
+    """Insert badge if not already awarded. Return True if new badge added."""
+    now = _now()
+    with get_conn() as conn:
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO badges (user_id, badge_key, awarded_at, metadata) VALUES (?, ?, ?, ?)",
+                (user_id, badge_key, now, metadata_json),
+            )
+            return conn.total_changes > 0
+        except Exception:
+            return False
+
+
+def get_user_badges(user_id: int) -> list[dict]:
+    """Return all awarded badges for user."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM badges WHERE user_id=? ORDER BY awarded_at ASC",
+            (user_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_user_verified_reports_count(username: str) -> int:
+    """Return total number of verified reports submitted by user."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as n FROM issues WHERE reported_by=? AND verification_status='verified'",
+            (username,),
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+
+def get_leaderboard_data(period: str = "all_time") -> list[dict]:
+    """
+    Return sorted leaderboard ranking for active citizens who have not opted out.
+    Period can be 'this_week', 'this_month', 'all_time'.
+    """
+    date_clause = ""
+    if period == "this_week":
+        date_clause = "AND cl.created_at >= datetime('now', '-7 days')"
+    elif period == "this_month":
+        date_clause = "AND cl.created_at >= datetime('now', '-30 days')"
+
+    with get_conn() as conn:
+        query = f"""
+        SELECT 
+            u.id as user_id,
+            u.username,
+            u.name,
+            u.show_on_leaderboard,
+            u.strikes,
+            u.rewards_suspended,
+            COALESCE(SUM(CASE WHEN cl.delta > 0 THEN cl.delta ELSE 0 END), 0) as period_credits,
+            (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger WHERE user_id = u.id) as total_credits,
+            (SELECT COUNT(*) FROM issues WHERE reported_by = u.username AND verification_status = 'verified') as verified_reports
+        FROM users u
+        LEFT JOIN credit_ledger cl ON u.id = cl.user_id {date_clause}
+        WHERE u.role = 'citizen' AND u.active = 1
+        GROUP BY u.id
+        ORDER BY period_credits DESC, total_credits DESC, verified_reports DESC, u.created_at ASC
+        """
+        rows = conn.execute(query).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ─── Utility ──────────────────────────────────────────────────────────────────
 
 def _now() -> str:
     from datetime import timezone
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+

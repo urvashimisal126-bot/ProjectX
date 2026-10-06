@@ -24,7 +24,7 @@ def render() -> None:
     page_header("Repair Queue", "Prioritized municipal work orders — triage, update statuses, and dispatch crews.", live=True)
 
     # ── Filters ────────────────────────────────────────────────────────────────
-    fc1, fc2, fc3, fc4, fc5 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.8, 1.3, 1.3, 1.3, 1.3, 1.3])
     with fc1:
         search = st.text_input("Search Area", placeholder="e.g. Vijay Nagar", key="q_search")
     with fc2:
@@ -34,6 +34,8 @@ def render() -> None:
     with fc4:
         f_status = st.multiselect("Status", ["reported", "assigned", "fixed"], key="q_status")
     with fc5:
+        f_verify = st.selectbox("Verification", ["All", "Unverified", "Verified", "Rejected"], key="q_verify")
+    with fc6:
         if has_permission(user, "manage_users"):
             try:
                 officers = [u for u in list_users(user) if u["role"] in ("officer", "admin")]
@@ -57,6 +59,9 @@ def render() -> None:
         filters["assigned_to"] = f_officer
 
     issues = list_issues(user, filters)
+    if f_verify and f_verify != "All":
+        target_v = f_verify.lower()
+        issues = [i for i in issues if i.get("verification_status", "unverified") == target_v]
 
     # ── Export & Count Bar ─────────────────────────────────────────────────────
     col_count, col_export = st.columns([3, 1])
@@ -85,10 +90,10 @@ def render() -> None:
         return
 
     # ── Ranked Queue Table ────────────────────────────────────────────────────
-    h1, h2, h3, h4, h5, h6, h7 = st.columns([0.6, 1.0, 2.5, 1.2, 1.2, 1.4, 2.2])
+    h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([0.6, 0.9, 2.2, 1.1, 1.1, 1.3, 1.2, 2.0])
     for col, label in zip(
-        [h1, h2, h3, h4, h5, h6, h7],
-        ["#", "Priority", "Hazard & Location", "Severity", "Status", "Reported", "Actions & Triage"],
+        [h1, h2, h3, h4, h5, h6, h7, h8],
+        ["#", "Priority", "Hazard & Location", "Severity", "Status", "Verification", "Reported", "Actions & Triage"],
     ):
         with col:
             st.markdown(
@@ -99,7 +104,7 @@ def render() -> None:
             )
 
     for iss in issues:
-        c1, c2, c3, c4, c5, c6, c7 = st.columns([0.6, 1.0, 2.5, 1.2, 1.2, 1.4, 2.2])
+        c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([0.6, 0.9, 2.2, 1.1, 1.1, 1.3, 1.2, 2.0])
         with c1:
             st.markdown(f'<span style="font-size:13px;font-weight:600;color:{TOKENS["muted"]}">#{iss["id"]}</span>', unsafe_allow_html=True)
         with c2:
@@ -116,8 +121,16 @@ def render() -> None:
         with c5:
             st.markdown(status_badge(iss["status"]), unsafe_allow_html=True)
         with c6:
-            st.markdown(f'<span style="font-size:13px;color:{TOKENS["muted"]}">{relative_time(iss["created_at"])}</span>', unsafe_allow_html=True)
+            v_stat = iss.get("verification_status", "unverified")
+            if v_stat == "verified":
+                st.markdown('<span style="background:rgba(27,156,133,0.12);color:#136F63;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;">Verified</span>', unsafe_allow_html=True)
+            elif v_stat == "rejected":
+                st.markdown('<span style="background:rgba(239,68,68,0.12);color:#C8372D;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;">Rejected</span>', unsafe_allow_html=True)
+            else:
+                st.markdown('<span style="background:rgba(100,116,139,0.12);color:#64748B;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;">Pending</span>', unsafe_allow_html=True)
         with c7:
+            st.markdown(f'<span style="font-size:13px;color:{TOKENS["muted"]}">{relative_time(iss["created_at"])}</span>', unsafe_allow_html=True)
+        with c8:
             a1, a2 = st.columns([1.5, 1.0])
             with a1:
                 new_status = st.selectbox(

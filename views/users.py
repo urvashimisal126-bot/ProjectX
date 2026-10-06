@@ -32,8 +32,8 @@ def render() -> None:
             empty_state("No users", "Create the first user below.")
         else:
             # Header
-            h1, h2, h3, h4, h5 = st.columns([1.5, 2, 1.5, 1.5, 2])
-            for col, label in zip([h1, h2, h3, h4, h5], ["Username", "Name", "Role", "Status", "Actions"]):
+            h1, h2, h3, h4, h5, h6 = st.columns([1.5, 1.8, 1.2, 1.2, 1.2, 2.2])
+            for col, label in zip([h1, h2, h3, h4, h5, h6], ["Username", "Name", "Role", "Credits / Strikes", "Status", "Actions"]):
                 with col:
                     st.markdown(
                         f'<div style="font-size:11px;font-weight:700;color:{TOKENS["muted"]};'
@@ -43,7 +43,7 @@ def render() -> None:
                     )
 
             for u in users:
-                c1, c2, c3, c4, c5 = st.columns([1.5, 2, 1.5, 1.5, 2])
+                c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.8, 1.2, 1.2, 1.2, 2.2])
                 with c1:
                     st.markdown(f'<span style="font-size:13px;font-weight:600">{u["username"]}</span>', unsafe_allow_html=True)
                 with c2:
@@ -67,26 +67,54 @@ def render() -> None:
                             except PermissionError as e:
                                 st.error(str(e))
                 with c4:
+                    if u["role"] == "citizen":
+                        creds = db.get_user_credits_balance(u["id"])
+                        strikes = u.get("strikes", 0)
+                        strike_color = "#EF4444" if strikes > 0 else "#64748B"
+                        st.markdown(f'<span style="font-size:13px; font-weight:700; color:#136F63;">{creds} pts</span> <br/><span style="font-size:11px; color:{strike_color}; font-weight:600;">{strikes} strike(s)</span>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span style="font-size:12px; color:#94A3B8;">Staff</span>', unsafe_allow_html=True)
+                with c5:
                     active_text = "Active" if u["active"] else "Inactive"
                     active_color = TOKENS["low"] if u["active"] else TOKENS["muted"]
                     st.markdown(
                         f'<span style="font-size:12px;font-weight:600;color:{active_color}">{active_text}</span>',
                         unsafe_allow_html=True,
                     )
-                with c5:
-                    if u["username"] != user["username"] and u["active"]:
-                        if st.button(
-                            "Deactivate",
-                            key=f"deact_{u['id']}",
-                        ):
-                            try:
-                                deactivate_user(user, u["id"])
-                                log_audit(user["username"], user["role"], "deactivate", None,
-                                          f"Deactivated {u['username']}")
-                                st.success(f"{u['username']} deactivated.")
-                                st.rerun()
-                            except PermissionError as e:
-                                st.error(str(e))
+                with c6:
+                    act_c1, act_c2 = st.columns(2)
+                    with act_c1:
+                        if u["role"] == "citizen":
+                            with st.popover("Adjust", key=f"adj_pop_{u['id']}"):
+                                st.markdown(f"**Adjust Credits: {u['username']}**")
+                                delta_val = st.number_input("Credit Delta (+/-)", step=10, key=f"adj_delta_{u['id']}")
+                                reason_txt = st.text_input("Reason / Note", key=f"adj_note_{u['id']}")
+                                if st.button("Apply", key=f"adj_btn_{u['id']}", type="primary"):
+                                    if delta_val != 0:
+                                        db.add_credit_ledger_entry(
+                                            user_id=u["id"],
+                                            delta=int(delta_val),
+                                            reason_code="MANUAL_ADJUSTMENT",
+                                            note=reason_txt or "Admin manual adjustment",
+                                            created_by=user.get("username", "admin"),
+                                        )
+                                        log_audit(user["username"], user["role"], "credit_adjustment", None, f"Adjusted {delta_val} credits for {u['username']}")
+                                        st.success("Adjustment applied.")
+                                        st.rerun()
+                    with act_c2:
+                        if u["username"] != user["username"] and u["active"]:
+                            if st.button(
+                                "Deactivate",
+                                key=f"deact_{u['id']}",
+                            ):
+                                try:
+                                    deactivate_user(user, u["id"])
+                                    log_audit(user["username"], user["role"], "deactivate", None,
+                                              f"Deactivated {u['username']}")
+                                    st.success(f"{u['username']} deactivated.")
+                                    st.rerun()
+                                except PermissionError as e:
+                                    st.error(str(e))
 
                 st.markdown(f'<div style="border-bottom:1px solid {TOKENS["border"]}"></div>', unsafe_allow_html=True)
 

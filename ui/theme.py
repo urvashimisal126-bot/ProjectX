@@ -44,12 +44,31 @@ def inject_css(hide_sidebar: bool = False) -> None:
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
         /* ── Reset & Typography ── */
-        html, body, [class*="css"], .stMarkdown, p, div, span, label, input, button, select, textarea {{
+        body, p, label, input, select, textarea,
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown, .stText, .stDataFrame, .stTable {{
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         }}
         body {{
             font-size: 16px !important;
             color: {TOKENS['navy']} !important;
+        }}
+
+        /* ── Protect Streamlit Material Symbols Icon Font ── */
+        [data-testid="stIconMaterial"],
+        [class*="material-symbols"],
+        [class*="material-icons"],
+        .material-icons,
+        .material-symbols-rounded {{
+            font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+            display: inline-block !important;
+            white-space: nowrap !important;
+            word-wrap: normal !important;
+            direction: ltr !important;
         }}
 
         /* ── Chrome Hiding (Keep sidebar collapse arrow functional) ── */
@@ -59,7 +78,7 @@ def inject_css(hide_sidebar: bool = False) -> None:
         div[data-testid="stDecoration"] {{ display: none !important; }}
         header[data-testid="stHeader"] {{
             background: transparent !important;
-            height: 3rem !important;
+            height: 2.2rem !important;
         }}
         header[data-testid="stHeader"] .stToolbarActions,
         header[data-testid="stHeader"] .stStatusWidget,
@@ -84,8 +103,8 @@ def inject_css(hide_sidebar: bool = False) -> None:
             background: {TOKENS['bg']} !important;
         }}
         .main .block-container {{
-            padding-top: 1.8rem !important;
-            padding-bottom: 3rem !important;
+            padding-top: 1.25rem !important;
+            padding-bottom: 2.5rem !important;
             max-width: 1400px !important;
         }}
 
@@ -93,13 +112,31 @@ def inject_css(hide_sidebar: bool = False) -> None:
         section[data-testid="stSidebar"] {{
             background: {TOKENS['navy']} !important;
             border-right: 1px solid #081a30 !important;
-            width: 270px !important;
+            width: 280px !important;
         }}
         section[data-testid="stSidebar"] * {{
             color: #d6e4f7;
         }}
         section[data-testid="stSidebar"] a {{
             color: #9ac4e8 !important;
+        }}
+
+        /* Sidebar Sign Out Button (Outlined on Navy) */
+        .sidebar-signout-btn > button {{
+            background: transparent !important;
+            color: #ffffff !important;
+            border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            padding: 0.5rem 1rem !important;
+            width: 100% !important;
+            transition: all 0.2s ease !important;
+        }}
+        .sidebar-signout-btn > button:hover {{
+            background: rgba(255, 255, 255, 0.12) !important;
+            border-color: #ffffff !important;
+            color: #ffffff !important;
         }}
 
         /* Navigation items in sidebar */
@@ -208,12 +245,6 @@ def inject_css(hide_sidebar: bool = False) -> None:
             box-shadow: 0 1px 3px rgba(11,37,69,0.04);
             margin-bottom: 1rem;
         }}
-        .urban-card-equal {{
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }}
 
         /* ── Tables & Dataframes ── */
         .stDataFrame thead th {{
@@ -233,16 +264,12 @@ def inject_css(hide_sidebar: bool = False) -> None:
             color: {TOKENS['navy']} !important;
         }}
 
-        /* ── Expanders & Modals ── */
-        .stExpander {{
-            border: 1px solid {TOKENS['border']} !important;
-            border-radius: 8px !important;
-            background: #ffffff !important;
-        }}
-        .stExpander summary {{
-            font-size: 14px !important;
-            font-weight: 600 !important;
-            color: {TOKENS['navy']} !important;
+        /* ── Map Attribution Removal ── */
+        .leaflet-control-attribution {{
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }}
 
         /* ── Tabular numbers ── */

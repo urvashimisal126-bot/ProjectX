@@ -252,28 +252,51 @@ def friendly_error_card(title: str, message: str, exc: Exception | None = None) 
 
 def sidebar_user_card(user: dict) -> None:
     """Render a clean user profile card at the bottom of the navy sidebar."""
+    import core.db as db
+    import core.credits as credits
+    
     role_colors = {
         "admin":   ("#FFF3CD", "#856404"),
         "officer": ("#D1ECF1", "#0C5460"),
         "citizen": ("#D4EDDA", "#155724"),
         "guest":   ("#E2E3E5", "#383D41"),
     }
-    bg, fg = role_colors.get(user.get("role", "guest"), ("#E2E3E5", "#383D41"))
-    role_label = user.get("role", "guest").upper()
+    role = user.get("role", "guest")
+    bg, fg = role_colors.get(role, ("#E2E3E5", "#383D41"))
+    role_label = role.upper()
     name = user.get("name", "Public User")
     username = user.get("username", "guest")
+
+    # Initial circle
+    initials = "".join([part[0] for part in name.split()[:2]]).upper() if name else "U"
+
+    extra_info_html = f'<div style="font-size:12px;color:#9ac4e8">@{username}</div>'
+    if role == "citizen":
+        user_record = db.get_user(username)
+        if user_record:
+            user_id = user_record.get("id", user.get("id"))
+            balance = db.get_user_credits_balance(user_id)
+            lvl_info = credits.get_user_level(balance)
+            extra_info_html = f'<div style="font-size:12px;color:#6CC48A;font-weight:600;margin-top:2px;">Level {lvl_info["level"]} · {balance} credits</div>'
 
     st.sidebar.markdown(
         f"""
         <div style="border-top:1px solid rgba(255,255,255,0.12);
                     padding-top:1rem;margin-top:1.5rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:14px;font-weight:700;color:#FFFFFF">{name}</div>
-            <span style="background:{bg};color:{fg};border-radius:4px;
-                         padding:2px 6px;font-size:10px;font-weight:700;
-                         letter-spacing:0.04em">{role_label}</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:#136F63;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;border:1.5px solid #1B9C85;flex-shrink:0;">
+              {initials}
+            </div>
+            <div style="flex-grow:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:14px;font-weight:700;color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</div>
+                <span style="background:{bg};color:{fg};border-radius:4px;
+                             padding:2px 6px;font-size:10px;font-weight:700;
+                             letter-spacing:0.04em;flex-shrink:0;margin-left:4px;">{role_label}</span>
+              </div>
+              {extra_info_html}
+            </div>
           </div>
-          <div style="font-size:12px;color:#9ac4e8">@{username}</div>
         </div>
         """,
         unsafe_allow_html=True,

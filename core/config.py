@@ -34,6 +34,41 @@ LOCATION_MULTIPLIERS: dict[str, float] = {
     "default":  1.0,
 }
 
+# ─── Citizen Credits & Rewards Rules ──────────────────────────────────────────
+CREDIT_RULES: dict[str, int] = {
+    "report_verified":       10,  # Base credit when Officer verifies a report
+    "first_at_location":      5,  # Bonus: first verified report at that spot (not duplicate)
+    "high_severity_bonus":   10,  # Bonus: verified High-severity hazard
+    "gps_and_ai_confidence":  3,  # Bonus: photo has GPS and AI confidence >= 0.50
+    "confirm_existing_bonus": 2,  # Bonus: merged duplicate report verified
+    "issue_fixed":           10,  # Credited when reported issue status changes to Fixed
+    "report_rejected":      -15,  # Penalty for fake, misleading, or rejected reports
+}
+
+# Anti-abuse constraints
+MAX_STRIKES_ALLOWED = 3
+DAILY_CREDIT_REPORT_CAP = 5       # Max 5 credited reports per user per calendar day
+DUPLICATE_REPORT_COOLDOWN_HOURS = 24
+
+# Citizen Progression Levels
+CITIZEN_LEVELS: list[dict] = [
+    {"level": 1, "title": "Newcomer",       "min_credits": 0},
+    {"level": 2, "title": "Observer",       "min_credits": 50},
+    {"level": 3, "title": "Contributor",    "min_credits": 150},
+    {"level": 4, "title": "Guardian",       "min_credits": 400},
+    {"level": 5, "title": "City Champion",  "min_credits": 1000},
+]
+
+# Badge definitions (no emojis in rendered UI, clean titles)
+BADGE_DEFINITIONS: dict[str, dict] = {
+    "first_report":        {"title": "First Report",        "description": "Submitted your first verified infrastructure hazard."},
+    "verified_10":         {"title": "10 Verified Reports", "description": "10 distinct reports verified by municipal officers."},
+    "pothole_spotter":     {"title": "Pothole Spotter",     "description": "Reported 5 or more verified potholes across Indore."},
+    "streetlight_watcher": {"title": "Streetlight Watcher", "description": "Reported 3 or more verified broken streetlights."},
+    "drain_detective":     {"title": "Drain Detective",     "description": "Reported 3 or more verified overflowing drains."},
+    "fixed_it":            {"title": "Fixed It",            "description": "5 of your reported issues were resolved and closed."},
+}
+
 # Landmark coords around Indore (lat, lon, type, name)
 # Radius for proximity match: 200 m
 LANDMARK_RADIUS_METERS = 200.0
@@ -111,5 +146,57 @@ GEMINI_API_KEY = get_secret("GEMINI_API_KEY", "")
 GEMINI_MODEL = get_secret("GEMINI_MODEL", "gemini-2.5-flash")
 DETECTOR = get_secret("DETECTOR", "gemini")  # "hybrid" | "yolo" | "gemini"
 GEMINI_DEFAULT_CONFIDENCE = 0.50             # documented fallback for Gemini-estimated detections
+
+
+# ─── Gamification & Citizen Credits ──────────────────────────────────────────
+CREDIT_RULES: dict[str, int] = {
+    "REPORT_VERIFIED": 25,
+    "HIGH_SEVERITY_BONUS": 15,
+    "FIRST_REPORT_BONUS": 50,
+    "PHOTO_QUALITY_BONUS": 10,
+    "DUPLICATE_MERGED": 5,
+    "PENALTY_SPAM": -50,
+}
+
+CITIZEN_LEVELS: list[dict] = [
+    {"level": 1, "title": "Neighbourhood Watch", "min_credits": 0, "max_credits": 99},
+    {"level": 2, "title": "Civic Scout", "min_credits": 100, "max_credits": 249},
+    {"level": 3, "title": "Community Champion", "min_credits": 250, "max_credits": 499},
+    {"level": 4, "title": "City Guardian", "min_credits": 500, "max_credits": 999},
+    {"level": 5, "title": "Civic Legend", "min_credits": 1000, "max_credits": 999999},
+]
+
+BADGE_DEFINITIONS: dict[str, dict] = {
+    "FIRST_STEP": {
+        "title": "First Step",
+        "description": "Submitted first verified civic issue.",
+        "icon": "flag",
+    },
+    "ROAD_WARRIOR": {
+        "title": "Road Warrior",
+        "description": "5+ verified road & pothole reports.",
+        "icon": "directions_car",
+    },
+    "COMMUNITY_HERO": {
+        "title": "Community Hero",
+        "description": "10+ verified reports across the city.",
+        "icon": "military_tech",
+    },
+    "CENTURION": {
+        "title": "Centurion",
+        "description": "Accumulated over 100 civic credits.",
+        "icon": "workspace_premium",
+    },
+    "MASTER_GUARDIAN": {
+        "title": "Master Guardian",
+        "description": "Reached Citizen Level 4 (City Guardian).",
+        "icon": "shield",
+    },
+}
+
+DAILY_CREDIT_REPORT_CAP: int = 5
+MAX_STRIKES_ALLOWED: int = 3
+DUPLICATE_REPORT_COOLDOWN_HOURS: int = 24
+
 
 

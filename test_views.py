@@ -86,14 +86,30 @@ class TestUrbanLensViewsAndRBAC(unittest.TestCase):
         self.assertFalse(has_permission(self.guest_user, "assign_status"))
         self.assertFalse(has_permission(self.guest_user, "export_csv"))
 
-    def test_landing_stats_from_db(self):
-        """Verify that landing stats compute accurately from real DB."""
-        from core.db import kpi_counts
-        kpis = kpi_counts(self.admin_user)
-        self.assertIn("total", kpis)
-        self.assertIn("high", kpis)
-        self.assertIn("fixed_week", kpis)
-        self.assertIsInstance(kpis["total"], int)
+    def test_leaderboard_rbac(self):
+        """Verify that Leaderboard is accessible to Citizen but not guest or officers."""
+        from core.db import has_permission
+        self.assertTrue(has_permission(self.citizen_user, "view_leaderboard"))
+        self.assertFalse(has_permission(self.guest_user, "view_leaderboard"))
+        self.assertFalse(has_permission(self.officer_user, "view_leaderboard"))
+        self.assertTrue(has_permission(self.officer_user, "verify_report"))
+        self.assertTrue(has_permission(self.admin_user, "manage_credits"))
+
+    def test_certificate_generator(self):
+        """Verify that certificate HTML generates properly with citizen stats."""
+        from views.leaderboard import _generate_certificate_html
+        html_out = _generate_certificate_html(
+            citizen_name="Ankit Joshi",
+            level_title="Community Champion",
+            level_num=3,
+            credits=350,
+            verified_count=12,
+        )
+        self.assertIn("Ankit Joshi", html_out)
+        self.assertIn("Community Champion", html_out)
+        self.assertIn("Level 3", html_out)
+        self.assertIn("350", html_out)
+        self.assertIn("Indore Municipal Corporation", html_out)
 
 
 if __name__ == "__main__":

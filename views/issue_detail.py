@@ -152,6 +152,25 @@ def render_issue_body(issue_id: int, user: dict | None = None) -> None:
                         st.image(ei["image_path"], use_container_width=True)
 
     with col_meta:
+        # Check reporter trust & verification status
+        reported_by_user = issue.get("reported_by") or ""
+        reporter_record = db.get_user(reported_by_user) if reported_by_user else None
+        v_status = issue.get("verification_status", "unverified")
+        
+        trust_badge_html = ""
+        if reporter_record and reporter_record.get("role") == "citizen":
+            v_cnt = db.get_user_verified_reports_count(reported_by_user)
+            strikes = reporter_record.get("strikes", 0)
+            is_susp = reporter_record.get("rewards_suspended", 0) == 1
+            tier_info = credits.get_reporter_trust_tier(v_cnt, strikes, is_susp)
+            trust_badge_html = f'<span style="background:{tier_info["badge_bg"]}; color:{tier_info["badge_color"]}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; margin-left:6px;">{tier_info["tier"]}</span>'
+
+        v_status_html = {
+            "verified": f'<span style="background:rgba(27,156,133,0.12); color:#136F63; font-size:12px; font-weight:700; padding:3px 8px; border-radius:6px;">Verified by {issue.get("verified_by") or "Officer"}</span>',
+            "rejected": f'<span style="background:rgba(239,68,68,0.12); color:#C8372D; font-size:12px; font-weight:700; padding:3px 8px; border-radius:6px;">Rejected</span>',
+            "unverified": '<span style="background:rgba(100,116,139,0.12); color:#64748B; font-size:12px; font-weight:700; padding:3px 8px; border-radius:6px;">Pending Verification</span>',
+        }.get(v_status, '<span style="color:#64748B;">Unverified</span>')
+
         st.markdown(
             f"""
             <div style="background:#FFFFFF;border:1px solid {TOKENS['border']};border-radius:10px;padding:1.25rem">
@@ -162,7 +181,8 @@ def render_issue_body(issue_id: int, user: dict | None = None) -> None:
                 {_meta_row("Priority", f'<strong class="tabnum">{issue["priority"]:.3f}</strong>')}
                 {_meta_row("Area", issue.get("area", "—"))}
                 {_meta_row("Reports Merged", str(issue.get("report_count", 1)))}
-                {_meta_row("Reported By", issue.get("reported_by") or "Anonymous")}
+                {_meta_row("Reported By", (issue.get("reported_by") or "Anonymous") + " " + trust_badge_html)}
+                {_meta_row("Verification", v_status_html)}
                 {_meta_row("Assigned To", issue.get("assigned_to") or "Unassigned")}
               </div>
             </div>
@@ -176,6 +196,52 @@ def render_issue_body(issue_id: int, user: dict | None = None) -> None:
                 f'Coordinates: {issue["lat"]:.5f}, {issue["lon"]:.5f}</div>',
                 unsafe_allow_html=True,
             )
+
+        if issue.get("reject_reason"):
+            st.markdown(
+                f"""
+                <div style="background:#FDF2F2; border-left:3px solid #EF4444; padding:8px 12px; border-radius:4px; margin-top:8px; font-size:12px; color:#991B1B;">
+                    <strong>Rejection Reason:</strong> {html.escape(issue["reject_reason"])}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Verification Action (Officers & Admins)
+        if has_permission(user, "verify_report") or role in ("admin", "officer"):
+            if v_status == "unverified":
+                is_own_report = (issue.get("reported_by") == user.get("username"))
+                st.markdown('<div style="margin-top:1rem; border-top:1px solid #E3E8EF; padding-top:0.75rem;">', unsafe_allow_html=True)
+                st.markdown('<div style="font-size:12px; font-weight:700; color:#0B2545; text-transform:uppercase; margin-bottom:6px;">Officer Verification & Credit Triage</div>', unsafe_allow_html=True)
+
+                if is_own_report:
+                    st.info("You submitted this report. Officers cannot self-verify reports.")
+                else:
+                    v_col1, v_col2 = st.columns(2)
+                    with v_col1:
+                        if st.button("Verify & Award Credits", key=f"verify_btn_{issue_id}", type="primary", use_container_width=True):
+                            try:
+                                res = credits.verify_and_reward_report(user, issue_id)
+                                st.success(f"Report verified! Awarded {res['total_credits_awarded']} credits.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(str(e))
+                    with v_col2:
+                        with st.popover("Reject Report", use_container_width=True):
+                            st.markdown("<div style='font-size:13px; font-weight:700; color:#0B2545; margin-bottom:4px;'>Reject Submission</div>", unsafe_allow_html=True)
+                            rej_reason = st.text_input("Rejection Reason (Required)", key=f"rej_reason_inp_{issue_id}", placeholder="e.g. Duplicate or non-civic photo")
+                            apply_strike_flag = st.checkbox("Flag spam strike & deduct 50 credits", key=f"strike_chk_{issue_id}")
+                            if st.button("Confirm Rejection", key=f"confirm_rej_btn_{issue_id}", type="secondary", use_container_width=True):
+                                if not rej_reason.strip():
+                                    st.error("Please enter a reason for rejection.")
+                                else:
+                                    try:
+                                        credits.reject_and_penalize_report(user, issue_id, rej_reason.strip(), apply_strike=apply_strike_flag)
+                                        st.warning("Report marked as rejected.")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(str(e))
+                st.markdown('</div>', unsafe_allow_html=True)
 
         # Status Transition Control (Officers / Admins)
         if has_permission(user, "assign_status"):

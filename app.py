@@ -50,6 +50,7 @@ import views.assistant as assistant_view
 import views.audit_log as audit_log_view
 import views.users as users_view
 import views.issue_detail as issue_detail_view
+import views.leaderboard as leaderboard_view
 
 
 def _wrap_safe(render_fn, title: str, slug: str):
@@ -154,6 +155,7 @@ else:
             st.Page(_wrap_safe(report_view.render, "Report Issue", "cit_report"), title="Report Issue", icon=":material/add_a_photo:", url_path="report"),
             st.Page(_wrap_safe(my_reports_view.render, "My Reports", "cit_my_reports"), title="My Reports", icon=":material/folder_open:", url_path="my-reports"),
             st.Page(_wrap_safe(map_view.render, "Live Map", "cit_map"), title="Live Map", icon=":material/map:", url_path="map"),
+            st.Page(_wrap_safe(leaderboard_view.render_leaderboard_view, "Leaderboard & Credits", "cit_leaderboard"), title="Leaderboard & Credits", icon=":material/leaderboard:", url_path="leaderboard"),
         ]
     elif role == "officer":
         pages = [
