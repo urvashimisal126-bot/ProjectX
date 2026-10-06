@@ -18,10 +18,14 @@ import folium
 from folium.plugins import MarkerCluster, HeatMap, Fullscreen, MiniMap, MeasureControl
 from branca.element import Element, MacroElement, Template
 
-from core.config import (
-    DEFAULT_LAT, DEFAULT_LON, DEFAULT_ZOOM, ISSUE_LABELS,
-    ENABLE_SATELLITE_LAYER, WARDS_GEOJSON_PATH
-)
+try:
+    from core.config import (
+        DEFAULT_LAT, DEFAULT_LON, DEFAULT_ZOOM, ISSUE_LABELS,
+        ENABLE_SATELLITE_LAYER, WARDS_GEOJSON_PATH
+    )
+except ImportError:
+    from core.config import DEFAULT_LAT, DEFAULT_LON, ISSUE_LABELS, ENABLE_SATELLITE_LAYER, WARDS_GEOJSON_PATH
+    DEFAULT_ZOOM = 12
 from ui.theme import TOKENS
 from ui.components import relative_time
 

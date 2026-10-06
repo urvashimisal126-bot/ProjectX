@@ -11,7 +11,11 @@ import plotly.express as px
 from streamlit_folium import st_folium
 
 from core.auth import current_user
-from core.config import DEFAULT_LAT, DEFAULT_LON, DEFAULT_ZOOM, ISSUE_CLASSES, ISSUE_LABELS, INDORE_AREAS
+try:
+    from core.config import DEFAULT_LAT, DEFAULT_LON, DEFAULT_ZOOM, ISSUE_CLASSES, ISSUE_LABELS, INDORE_AREAS
+except ImportError:
+    from core.config import DEFAULT_LAT, DEFAULT_LON, ISSUE_CLASSES, ISSUE_LABELS, INDORE_AREAS
+    DEFAULT_ZOOM = 12
 from core.db import get_map_issues
 from core.mapkit import build_map, SEV_MARKER_COLORS
 from ui.components import page_header, empty_state
