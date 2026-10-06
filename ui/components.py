@@ -220,3 +220,94 @@ def sidebar_user_block(user: dict) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+# ─── AI Assessment Card ───────────────────────────────────────────────────────
+
+def ai_assessment_card(assessment: dict | None, model_name: str = "Google Gemini") -> None:
+    """Render a structured AI assessment card matching the civic operations theme."""
+    if not assessment:
+        st.markdown(
+            f"""
+            <div style="background:{TOKENS['surface']};border:1px solid {TOKENS['border']};
+                        border-radius:8px;padding:1rem 1.25rem;margin-top:0.75rem">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                <span style="font-size:13px;font-weight:700;color:{TOKENS['navy']};letter-spacing:0.02em">
+                  AI Assessment
+                </span>
+                <span style="font-size:11px;color:{TOKENS['muted']}">Powered by Google Gemini</span>
+              </div>
+              <div style="font-size:13px;color:{TOKENS['muted']};line-height:1.5">
+                AI qualitative assessment is currently unavailable (offline mode or API key unconfigured).
+                Automated deterministic scoring remains fully active.
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    confirmed = assessment.get("confirmed", True)
+    hazard_type = assessment.get("hazard_type", "hazard").replace("_", " ").title()
+    sev_hint = assessment.get("severity_hint", "medium").upper()
+    risk = assessment.get("risk_to_public", "")
+    desc = assessment.get("description", "")
+    action = assessment.get("recommended_action", "")
+    urgency = assessment.get("urgency_reason", "")
+    agrees = assessment.get("agrees_with_yolo")
+
+    sev_color = TOKENS["high"] if sev_hint == "HIGH" else (TOKENS["medium"] if sev_hint == "MEDIUM" else TOKENS["low"])
+    conf_badge = '<span style="background:#edf8f2;color:#1B9C85;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">CONFIRMED</span>' if confirmed else '<span style="background:#fdf0ef;color:#C8372D;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">UNCONFIRMED</span>'
+
+    agreement_html = ""
+    if agrees is True:
+        agreement_html = '<span style="background:#edf8f5;color:#136F63;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;margin-left:8px">YOLO & Gemini Agree</span>'
+    elif agrees is False:
+        agreement_html = '<span style="background:#fdf6ec;color:#E08A1E;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;margin-left:8px">Detector Disagreement</span>'
+
+    st.markdown(
+        f"""
+        <div style="background:{TOKENS['surface']};border:1px solid {TOKENS['border']};
+                    border-radius:8px;padding:1.2rem;margin-top:0.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.03)">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid {TOKENS['border']};padding-bottom:0.6rem;margin-bottom:0.8rem">
+            <div style="display:flex;align-items:center">
+              <span style="font-size:13px;font-weight:700;color:{TOKENS['navy']};letter-spacing:0.02em">
+                AI Inspection Assessment
+              </span>
+              {agreement_html}
+            </div>
+            <div style="font-size:11px;color:{TOKENS['muted']}">
+              {conf_badge} <span style="margin-left:6px;color:{TOKENS['deep_teal']};font-weight:600">{model_name}</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.8rem">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:{TOKENS['muted']};text-transform:uppercase;margin-bottom:2px">Hazard Assessment</div>
+              <div style="font-size:13px;font-weight:600;color:{TOKENS['navy']}">{hazard_type} <span style="color:{sev_color};font-weight:700">({sev_hint})</span></div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:{TOKENS['muted']};text-transform:uppercase;margin-bottom:2px">Recommended Action</div>
+              <div style="font-size:13px;font-weight:600;color:{TOKENS['navy']}">{action or 'Site inspection'}</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:0.6rem">
+            <div style="font-size:11px;font-weight:600;color:{TOKENS['muted']};text-transform:uppercase;margin-bottom:2px">Visual Condition</div>
+            <div style="font-size:13px;color:{TOKENS['navy']};line-height:1.4">{desc}</div>
+          </div>
+
+          <div style="margin-bottom:0.6rem">
+            <div style="font-size:11px;font-weight:600;color:{TOKENS['muted']};text-transform:uppercase;margin-bottom:2px">Public Safety Impact</div>
+            <div style="font-size:13px;color:{TOKENS['navy']};line-height:1.4">{risk}</div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;font-weight:600;color:{TOKENS['muted']};text-transform:uppercase;margin-bottom:2px">Urgency Rationale</div>
+            <div style="font-size:12px;color:{TOKENS['muted']};line-height:1.4">{urgency}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+

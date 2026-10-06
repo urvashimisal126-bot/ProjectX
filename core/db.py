@@ -136,6 +136,14 @@ def init_db() -> None:
             timestamp   TEXT    NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS gemini_cache (
+            cache_key   TEXT PRIMARY KEY,
+            model       TEXT NOT NULL,
+            feature     TEXT NOT NULL,
+            response_json TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_issues_status       ON issues(status);
         CREATE INDEX IF NOT EXISTS idx_issues_severity     ON issues(severity_label);
         CREATE INDEX IF NOT EXISTS idx_issues_type         ON issues(type);
@@ -143,6 +151,15 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_audit_timestamp     ON audit_log(timestamp);
         CREATE INDEX IF NOT EXISTS idx_audit_user          ON audit_log(user);
         """)
+
+        # Schema migrations for existing DB
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(issues)").fetchall()]
+        if "ai_assessment" not in cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN ai_assessment TEXT DEFAULT NULL")
+        if "ai_model" not in cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN ai_model TEXT DEFAULT NULL")
+        if "detector_source" not in cols:
+            conn.execute("ALTER TABLE issues ADD COLUMN detector_source TEXT DEFAULT 'yolo'")
 
 
 def db_is_empty() -> bool:
@@ -208,15 +225,17 @@ def create_issue(actor: dict, data: dict) -> int:
             """INSERT INTO issues
                (type,severity_score,severity_label,priority,lat,lon,area,
                 location_type,image_path,report_count,status,assigned_to,
-                reported_by,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                reported_by,ai_assessment,ai_model,detector_source,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 data["type"], data["severity_score"], data["severity_label"],
                 data["priority"], data.get("lat"), data.get("lon"),
                 data.get("area", ""), data.get("location_type", "default"),
                 data.get("image_path", ""), data.get("report_count", 1),
                 data.get("status", "reported"), data.get("assigned_to"),
-                actor.get("username", ""), now, now,
+                actor.get("username", ""), data.get("ai_assessment"),
+                data.get("ai_model"), data.get("detector_source", "yolo"),
+                now, now,
             ),
         )
         iid = cur.lastrowid
@@ -224,7 +243,7 @@ def create_issue(actor: dict, data: dict) -> int:
     if data.get("image_path"):
         add_issue_image(
             iid, data["image_path"],
-            data.get("confidence", 0.0)
+            data.get("confidence", 0.0) or 0.0
         )
     return iid
 

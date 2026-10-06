@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import io
+import json
 import uuid
 from pathlib import Path
 
@@ -10,15 +11,19 @@ import streamlit as st
 from PIL import Image
 
 from core.auth import current_user, require_role
-from core.config import DEFAULT_LAT, DEFAULT_LON, ISSUE_CLASSES, ISSUE_LABELS, UPLOAD_DIR, DEFAULT_CONF_THRESHOLD
+from core.config import (
+    DEFAULT_LAT, DEFAULT_LON, ISSUE_CLASSES, ISSUE_LABELS,
+    UPLOAD_DIR, DEFAULT_CONF_THRESHOLD, DETECTOR, GEMINI_MODEL,
+    GEMINI_DEFAULT_CONFIDENCE
+)
 from core.detect import detect_image, detect_video, DEMO_MODE
 from core.geo import extract_gps, get_location_type
 from core.score import compute_severity, compute_priority, severity_breakdown
-from core.db import create_issue
+from core.db import create_issue, has_permission
 from core.dedupe import find_duplicate, merge_into
 from core.audit import log_audit
 from core.notify import send_high_severity_alert
-from ui.components import page_header, severity_badge
+from ui.components import page_header, severity_badge, ai_assessment_card
 from ui.theme import TOKENS
 
 
@@ -37,12 +42,11 @@ def render() -> None:
     require_role(["admin", "officer", "citizen"])
     user = current_user()
 
-    page_header("Report Issue", "Upload a photo or video — AI will detect and classify the problem.")
+    page_header("Report Issue", "Upload a photo or video — hybrid AI will detect, classify, and assess the hazard.")
 
     if DEMO_MODE:
         st.warning(
-            "**Demo mode:** using simulated detection — no model file found at models/best.pt. "
-            "Results are illustrative only.",
+            "**Demo mode:** YOLO model weights missing from models/best.pt. Using Gemini and synthetic bounding boxes.",
             icon="⚠️",
         )
 
@@ -80,7 +84,23 @@ def render() -> None:
             st.image(file_path, use_container_width=True)
 
     # ── Advanced settings ─────────────────────────────────────────────────────
-    with st.expander("Advanced settings", expanded=False):
+    can_configure_detector = (user or {}).get("role") in ["admin", "officer"]
+    detector_mode = DETECTOR
+
+    with st.expander("Advanced settings & AI configuration", expanded=False):
+        if can_configure_detector:
+            mode_options = ["hybrid", "yolo", "gemini"]
+            curr_idx = mode_options.index(DETECTOR) if DETECTOR in mode_options else 0
+            detector_mode = st.selectbox(
+                "Detection Engine Mode",
+                options=mode_options,
+                index=curr_idx,
+                help="Hybrid uses YOLO first and Gemini for assessment; Gemini uses vision reasoning; YOLO runs local models.",
+                format_func=lambda m: f"{m.upper()} mode" + (" (Recommended)" if m == "hybrid" else ""),
+            )
+        else:
+            st.markdown(f"<div style='font-size:12px;color:{TOKENS['muted']}'>Active Detector: <strong>{DETECTOR.upper()}</strong></div>", unsafe_allow_html=True)
+
         conf_threshold = st.slider(
             "Confidence threshold",
             min_value=0.10, max_value=0.90,
@@ -96,20 +116,25 @@ def render() -> None:
         )
 
     # ── Analyse button ────────────────────────────────────────────────────────
-    if st.button("Analyse", key="analyse_btn"):
-        with st.spinner("Running AI detection…"):
+    if st.button("Analyse with AI", key="analyse_btn", type="primary"):
+        with st.spinner(f"Running {detector_mode.upper()} detection & Gemini assessment…"):
             try:
                 if is_video:
-                    result = detect_video(file_path, conf_threshold, selected_classes or ISSUE_CLASSES)
+                    result = detect_video(file_path, conf_threshold=conf_threshold, class_list=selected_classes or ISSUE_CLASSES, mode=detector_mode, actor=user)
+                    if result:
+                        st.session_state["report_result"] = result[0]
+                    else:
+                        st.session_state["report_result"] = None
                 else:
-                    result = detect_image(file_path, conf_threshold, selected_classes or ISSUE_CLASSES)
+                    result = detect_image(file_path, conf_threshold=conf_threshold, class_list=selected_classes or ISSUE_CLASSES, mode=detector_mode, actor=user)
+                    st.session_state["report_result"] = result
             except Exception as e:
-                st.error(f"Detection failed: {e}")
+                st.error(f"Detection pipeline error: {e}")
                 return
 
-        st.session_state["report_result"] = result
         st.session_state["report_file_path"] = file_path
         st.session_state["report_is_video"] = is_video
+        st.session_state["report_detector_used"] = detector_mode
 
     result = st.session_state.get("report_result")
     file_path_saved = st.session_state.get("report_file_path", file_path)
@@ -118,20 +143,25 @@ def render() -> None:
         return
 
     with col_analysis:
-        st.markdown(f'<div style="font-size:13px;font-weight:700;color:{TOKENS["muted"]};margin-bottom:0.5rem">DETECTION RESULT</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:13px;font-weight:700;color:{TOKENS["muted"]};margin-bottom:0.5rem">DETECTION RESULT ({result.detector_used.upper()})</div>', unsafe_allow_html=True)
         st.image(result.annotated_image, use_container_width=True)
 
+    # ── AI Assessment Card ────────────────────────────────────────────────────
+    assess_dict = result.assessment.model_dump() if result.assessment else None
+    ai_assessment_card(assess_dict, model_name=f"Google {GEMINI_MODEL}")
+
     if not result.detections:
-        st.info("No infrastructure issues detected in this file. Try adjusting the confidence threshold.")
+        st.info("No infrastructure issues detected in this file. Try adjusting the confidence threshold or detector mode.")
         return
 
     # ── Detection breakdown ───────────────────────────────────────────────────
-    st.markdown(f'<div style="font-size:14px;font-weight:700;color:{TOKENS["navy"]};margin:1rem 0 0.5rem">Detections</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:14px;font-weight:700;color:{TOKENS["navy"]};margin:1.25rem 0 0.5rem">Detected Hazards</div>', unsafe_allow_html=True)
 
-    # Use the highest-confidence detection as primary
-    primary = max(result.detections, key=lambda d: d.confidence)
+    # Determine primary detection
+    primary = max(result.detections, key=lambda d: d.confidence if d.confidence is not None else GEMINI_DEFAULT_CONFIDENCE)
     detect_count = len(result.detections)
 
+    eff_conf = primary.confidence if primary.confidence is not None else GEMINI_DEFAULT_CONFIDENCE
     score, label = compute_severity(primary.area_ratio, primary.confidence, detect_count)
     breakdown = severity_breakdown(
         primary.area_ratio, primary.confidence, detect_count, "default", 1
@@ -141,15 +171,18 @@ def render() -> None:
     for i, det in enumerate(result.detections):
         with dcols[i]:
             s, l = compute_severity(det.area_ratio, det.confidence, detect_count)
+            conf_display = f"{det.confidence:.0%}" if det.confidence is not None else "Estimated (50%)"
+            src_badge = f'<span style="font-size:10px;background:#edf3fb;color:#2F6FB5;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:4px">{det.source.upper()}</span>'
+
             st.markdown(
                 f'<div style="background:#fff;border:1px solid {TOKENS["border"]};'
                 f'border-radius:8px;padding:0.75rem">'
-                f'<div style="font-size:12px;font-weight:700;color:{TOKENS["muted"]};'
-                f'text-transform:uppercase">{ISSUE_LABELS.get(det.class_name, det.class_name)}</div>'
-                f'<div style="font-size:20px;font-weight:700;color:{TOKENS["navy"]};margin:4px 0">'
-                f'{det.confidence:.0%}</div>'
-                f'<div style="font-size:12px;color:{TOKENS["muted"]}">Confidence</div>'
-                f'<div style="margin-top:8px">{severity_badge(l)}</div>'
+                f'<div style="display:flex;justify-content:space-between;align-items:center">'
+                f'<span style="font-size:12px;font-weight:700;color:{TOKENS["muted"]};text-transform:uppercase">{ISSUE_LABELS.get(det.class_name, det.class_name)}</span>'
+                f'{src_badge}'
+                f'</div>'
+                f'<div style="font-size:18px;font-weight:700;color:{TOKENS["navy"]};margin:4px 0">{conf_display}</div>'
+                f'<div style="font-size:11px;color:{TOKENS["muted"]}">Confidence · {severity_badge(l)}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -161,9 +194,9 @@ def render() -> None:
 
     if gps:
         lat_val, lon_val = gps
-        st.success(f"GPS extracted from image: {lat_val:.5f}, {lon_val:.5f}")
+        st.success(f"GPS extracted from photo metadata: {lat_val:.5f}, {lon_val:.5f}")
     else:
-        st.info("No GPS data found. Please enter coordinates manually or use the defaults (Indore).")
+        st.info("No EXIF GPS found in image. Please provide coordinates or use the Indore defaults.")
         c_lat, c_lon = st.columns(2)
         with c_lat:
             lat_val = st.number_input("Latitude", value=DEFAULT_LAT, format="%.5f", key="lat_input")
@@ -176,7 +209,7 @@ def render() -> None:
     # ── Submit ────────────────────────────────────────────────────────────────
     st.markdown(f'<div style="margin-top:1.25rem"></div>', unsafe_allow_html=True)
 
-    if st.button("Submit Report", key="submit_report_btn"):
+    if st.button("Submit Report to Queue", key="submit_report_btn", type="primary"):
         loc_type = get_location_type(lat_val, lon_val)
         priority = compute_priority(score, loc_type, 1)
 
@@ -184,13 +217,13 @@ def render() -> None:
         dup_id = find_duplicate(primary.class_name, lat_val, lon_val)
 
         if dup_id:
-            merge_into(dup_id, file_path_saved, primary.confidence, user)
+            merge_into(dup_id, file_path_saved, eff_conf, user)
             st.success(
-                f"This issue was merged with existing Report #{dup_id} "
-                f"(same type detected within 10 m). Report count updated."
+                f"Merged with existing Issue #{dup_id} "
+                f"(same hazard within 10 m radius). Report counter updated."
             )
             log_audit(user["username"], user["role"], "merged", dup_id,
-                      f"New upload merged into #{dup_id}")
+                      f"Upload merged into issue #{dup_id}")
         else:
             issue_data = {
                 "type":           primary.class_name,
@@ -202,14 +235,17 @@ def render() -> None:
                 "area":           area or "Unknown",
                 "location_type":  loc_type,
                 "image_path":     file_path_saved,
-                "confidence":     primary.confidence,
+                "confidence":     eff_conf,
                 "report_count":   1,
                 "status":         "reported",
+                "ai_assessment":  json.dumps(assess_dict) if assess_dict else None,
+                "ai_model":       f"Google {GEMINI_MODEL}" if assess_dict else None,
+                "detector_source": result.detector_used,
             }
             try:
                 iid = create_issue(user, issue_data)
                 log_audit(user["username"], user["role"], "upload", iid,
-                          f"Reported {primary.class_name} in {area or 'Unknown'}")
+                          f"Reported {primary.class_name} in {area or 'Unknown'} via {result.detector_used}")
 
                 if label == "High":
                     try:
@@ -217,7 +253,7 @@ def render() -> None:
                     except Exception:
                         pass
 
-                st.success(f"Issue #{iid} reported successfully!")
+                st.success(f"Issue #{iid} successfully submitted to the repair queue!")
                 st.markdown(
                     f'<div style="font-size:13px;color:{TOKENS["muted"]};margin-top:0.5rem">'
                     f'Severity: {severity_badge(label)} &nbsp; Priority score: '
@@ -226,7 +262,7 @@ def render() -> None:
                     unsafe_allow_html=True,
                 )
                 # Clear state
-                for k in ["report_result", "report_file_path", "report_is_video"]:
+                for k in ["report_result", "report_file_path", "report_is_video", "report_detector_used"]:
                     st.session_state.pop(k, None)
             except PermissionError as e:
                 st.error(str(e))

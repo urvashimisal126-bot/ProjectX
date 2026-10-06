@@ -184,9 +184,82 @@ def render() -> None:
                            coloraxis_showscale=False, yaxis=dict(autorange="reversed"))
         st.plotly_chart(_chart_layout(fig6, height=320), use_container_width=True, config={"displayModeBar": False})
 
+    # ── Executive Weekly Brief (Gemini AI Narrative) ─────────────────────────
+    if user.get("role") in ["admin", "officer"]:
+        st.markdown(f'<div style="margin-top:2rem"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:16px;font-weight:700;color:{TOKENS["navy"]};margin-bottom:0.5rem">Executive Weekly Operations Brief</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:13px;color:{TOKENS["muted"]};margin-bottom:1rem">Generate an executive narrative summary synthesized directly from verified database statistics.</div>', unsafe_allow_html=True)
+
+        if st.button("Generate Weekly Operations Brief", key="gen_weekly_brief_btn", type="primary"):
+            from core.ai_assess import generate_weekly_brief
+            # Compute ground-truth stats directly from filtered DB data
+            total_count = len(df)
+            by_status = df["status"].value_counts().to_dict()
+            by_sev = df["severity_label"].value_counts().to_dict()
+            by_type = df["type"].value_counts().to_dict()
+            top_areas = df["area"].value_counts().head(5).to_dict()
+
+            stats_payload = {
+                "total_issues_in_period": total_count,
+                "status_breakdown": by_status,
+                "severity_breakdown": by_sev,
+                "hazard_type_counts": by_type,
+                "top_hotspot_neighborhoods": top_areas,
+                "average_time_to_fix_hours": round(float(fixed_df2["hours"].mean()), 1) if not fixed_df2.empty else None,
+            }
+
+            with st.spinner("Synthesizing executive brief with Google Gemini…"):
+                brief = generate_weekly_brief(stats_payload, actor=user)
+
+            if brief:
+                st.session_state["cached_weekly_brief"] = brief
+                log_audit(user["username"], user["role"], "weekly_brief", None, f"Generated brief for {total_count} issues")
+            else:
+                st.warning("Brief synthesis unavailable (offline mode or API key inactive).")
+
+        saved_brief = st.session_state.get("cached_weekly_brief")
+        if saved_brief:
+            st.markdown(
+                f"""
+                <div style="background:#fff;border:1px solid {TOKENS['border']};border-radius:8px;padding:1.5rem;margin-top:1rem">
+                  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid {TOKENS['border']};padding-bottom:0.75rem;margin-bottom:1rem">
+                    <span style="font-size:16px;font-weight:700;color:{TOKENS['navy']}">{saved_brief.title}</span>
+                    <span style="font-size:11px;background:#edf3fb;color:#2F6FB5;padding:2px 8px;border-radius:4px;font-weight:600">Google Gemini Powered</span>
+                  </div>
+                  <div style="font-size:13px;color:{TOKENS['navy']};line-height:1.6;margin-bottom:1rem">
+                    {saved_brief.executive_summary}
+                  </div>
+                  <div style="margin-bottom:1rem">
+                    <strong style="font-size:13px;color:{TOKENS['navy']}">Key Operational Takeaways:</strong>
+                    <ul style="font-size:13px;color:{TOKENS['navy']};margin-top:0.4rem;padding-left:1.2rem">
+                      {''.join(f'<li>{t}</li>' for t in saved_brief.key_takeaways)}
+                    </ul>
+                  </div>
+                  <div>
+                    <strong style="font-size:13px;color:{TOKENS['navy']}">Recommended Field Actions:</strong>
+                    <ul style="font-size:13px;color:{TOKENS['navy']};margin-top:0.4rem;padding-left:1.2rem">
+                      {''.join(f'<li>{a}</li>' for a in saved_brief.action_items)}
+                    </ul>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Download markdown option
+            md_content = f"# {saved_brief.title}\n\n## Executive Summary\n{saved_brief.executive_summary}\n\n## Key Takeaways\n" + "\n".join(f"- {t}" for t in saved_brief.key_takeaways) + "\n\n## Action Items\n" + "\n".join(f"- {a}" for a in saved_brief.action_items)
+            st.download_button(
+                "Download Brief (.md)",
+                data=md_content,
+                file_name="urbanlens_weekly_brief.md",
+                mime="text/markdown",
+                key="download_brief_md",
+            )
+
 
 def _card_header(title: str) -> None:
     st.markdown(
         f'<div style="font-size:13px;font-weight:700;color:{TOKENS["navy"]};margin-bottom:0.5rem">{title}</div>',
         unsafe_allow_html=True,
     )
+

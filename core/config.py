@@ -81,3 +81,24 @@ DB_PATH = "urbanlens.db"
 # ─── Image storage ────────────────────────────────────────────────────────────
 UPLOAD_DIR = "data/uploads"
 SAMPLE_DIR = "data/samples"
+
+# ─── Gemini & Hybrid Detection ───────────────────────────────────────────────
+import os
+
+
+def get_secret(key: str, default: str = "") -> str:
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY", "")
+GEMINI_MODEL = get_secret("GEMINI_MODEL", "gemini-2.5-flash")
+DETECTOR = get_secret("DETECTOR", "gemini")  # "hybrid" | "yolo" | "gemini"
+GEMINI_DEFAULT_CONFIDENCE = 0.50             # documented fallback for Gemini-estimated detections
+
+

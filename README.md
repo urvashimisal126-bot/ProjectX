@@ -4,35 +4,67 @@
 
 UrbanLens is an open-source AI system for municipal teams. It detects, classifies and prioritizes public infrastructure issues — potholes, road damage, broken streetlights, overflowing drains — from photos or video, geotags them, merges duplicates, and displays a ranked repair queue on a live, role-based dashboard with a full audit trail.
 
-Built for **Hacktoberfest '26** (AITR ACM × MLH) · *Best Open-Source AI Project — Problem Statement 1: AI-Powered Public Infrastructure Monitoring*
+Built for **Hacktoberfest '26** (AITR ACM × MLH) · *Best Open-Source AI Project — Problem Statement 1: AI-Powered Public Infrastructure Monitoring* & *Best Use of Gemini API*.
 
 ---
 
 ## Features
 
-- **AI Detection** — YOLOv8 on uploaded images or video; falls back to Demo Mode if no custom model is present
-- **Smart Scoring** — severity from area coverage, confidence and detection count; priority multiplied by location type (school/hospital/highway)
-- **Auto-Deduplication** — same issue within 10 m is merged; report count tracked
-- **Live Map** — CartoDB Positron basemap, severity-colored markers, image popups
-- **Repair Queue** — ranked, filterable table with inline status updates and CSV export
-- **Role-Based Access** — Admin, Officer, Citizen, Guest — enforced in the DB layer, not just the UI
-- **Audit Trail** — every login, upload, assignment, merge, and export logged
-- **Analytics** — issue trends, severity split, status funnel, time-to-fix, hotspot chart
-- **Comments** — threaded comments on each issue, visible to all permitted users
-- **Optional Email** — SMTP alert to admins for High-severity issues
+- **Hybrid AI Detection & Inspection** — YOLOv8 for rapid bounding boxes coupled with Google Gemini for rich qualitative assessment, hazard verification, and recommended municipal repair actions.
+- **"Ask UrbanLens" Natural-Language Assistant** — Translates complex natural-language civic questions into live, role-checked database filter queries.
+- **Bilingual Civic Summaries** — Executive 2-sentence condition summaries in English and Hindi (हिंदी) directly on issue detail records.
+- **Executive Weekly Briefs** — Synthesizes narrative operational summaries based strictly on verified database numbers.
+- **Smart Scoring Formula** — Deterministic severity ($0.5 \times \text{area} + 0.3 \times \text{confidence} + 0.2 \times \text{count}$) and location-multiplier priority (1.5× near hospitals/schools, 1.3× on highways).
+- **Auto-Deduplication** — Reports within 10 m radius of the same hazard type automatically merge with an updated counter.
+- **Live Interactive Map** — CartoDB Positron basemap with severity-colored markers and issue inspection popups.
+- **Ranked Repair Queue** — Dense, filterable table with bulk actions, status transitions, and CSV exports.
+- **Backend-Enforced RBAC** — Admin, Officer, Citizen, Guest roles with internal checks inside `core/db.py`.
+- **Immutable Audit Trail** — Tracks every login, denied action, upload, merge, assignment, and export.
+- **Plotly Analytics Dashboard** — Issues by type, severity splits, status funnels, resolution times, and regional hotspot bars.
+
+---
+
+## Google Gemini Hybrid Integration
+
+UrbanLens features a hybrid intelligence architecture:
+
+| Component | Responsibility |
+|---|---|
+| **YOLOv8** | High-speed, local computer vision detector for spatial bounding boxes and measured confidence. |
+| **Google Gemini** | Deep visual reasoning: hazard confirmation, public safety impact analysis, repair action recommendations, natural-language search translation, and bilingual summaries. |
+| **Scoring Formula** | **"Gemini advises, the formula decides."** Severity and priority remain 100% deterministic in code. |
+
+### Hybrid Detector Modes (`DETECTOR` in `core/config.py`):
+1. **`hybrid` (Default):** Runs YOLOv8 first. Gemini provides qualitative assessment, verifies hazard existence, and adds extra classes (e.g. streetlights) missed by YOLO.
+2. **`gemini`:** Uses Gemini vision reasoning directly with normalized bounding boxes. Confidence is documented as `gemini_estimate` ($0.50$).
+3. **`yolo`:** Local offline YOLOv8 mode. Zero external network calls required.
+
+### Gemini API Key Configuration
+Create a free Gemini API key at [Google AI Studio](https://aistudio.google.com/apikey).
+Add it to `.streamlit/secrets.toml` or set an environment variable:
+```toml
+# .streamlit/secrets.toml
+GEMINI_API_KEY = "your_gemini_api_key_here"
+GEMINI_MODEL = "gemini-2.5-flash"
+DETECTOR = "hybrid"
+```
+*Note: Both `.streamlit/secrets.toml` and `.env` are excluded by `.gitignore`.*
+
+### Data Privacy & Offline Graceful Degradation
+- If no Gemini key is configured or the internet is offline, UrbanLens gracefully switches to offline YOLO mode with clear "AI assessment unavailable" banners. Deterministic scoring is never disrupted.
+- Image text is treated strictly as passive data to prevent prompt injection.
 
 ---
 
 ## Demo Credentials
 
-| Role    | Username  | Password    |
-|---------|-----------|-------------|
-| Admin   | admin     | admin123    |
-| Officer | officer1  | officer123  |
-| Officer | officer2  | officer123  |
-| Citizen | citizen1  | citizen123  |
-
-A "Continue as Guest" option is available on the login page (read-only public map).
+| Role    | Username  | Password    | Permissions & Capabilities |
+|---------|-----------|-------------|----------------------------|
+| **Admin**   | `admin`     | `admin123`    | Full system access, Audit Log, User & Role Management, Weekly Briefs |
+| **Officer** | `officer1`  | `officer123`  | Repair Queue, Status Updates & Assignment, Ask UrbanLens Assistant, Analytics |
+| **Officer** | `officer2`  | `officer123`  | Repair Queue, Status Updates & Assignment, Ask UrbanLens Assistant, Analytics |
+| **Citizen** | `citizen1`  | `citizen123`  | Report an Issue, My Reports with order-tracking timeline |
+| **Guest**   | *(Click "Continue as Guest")* | N/A | Read-only public map and aggregate issue counters |
 
 ---
 
@@ -43,14 +75,26 @@ A "Continue as Guest" option is available on the login page (read-only public ma
 git clone https://github.com/urvashimisal126-bot/ProjectX.git
 cd ProjectX
 
-# 2. Install
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Run (DB and seed created automatically on first launch)
-streamlit run app.py
+# 3. Run Unit Tests (16/16 passing)
+python test_core.py
+python test_gemini.py
+
+# 4. Start UrbanLens (Auto-seeds on first start)
+python -m streamlit run app.py
 ```
 
-Open http://localhost:8501 in your browser.
+Open **[http://localhost:8501](http://localhost:8501)** in your browser.
+
+---
+
+## Live Smoke Test Script
+To run an automated connectivity, parsing, and structured output test of your Gemini configuration:
+```bash
+python scripts/test_gemini.py
+```
 
 ---
 
@@ -65,16 +109,11 @@ docker run -p 8501:8501 urbanlens
 
 ## Deploy to Streamlit Community Cloud
 
-1. Push this repository to GitHub (public or private).
-2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo.
+1. Push this repository to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repository.
 3. Set **Main file path** to `app.py`.
-4. The `packages.txt` file handles system dependencies (OpenCV).
-
----
-
-## Custom Model
-
-Place your YOLOv8 weights at `models/best.pt`. The app detects the file automatically and exits Demo Mode. The class list is configured in `core/config.py` (`ISSUE_CLASSES`).
+4. In Advanced Settings, add `GEMINI_API_KEY = "..."` under Secrets.
+5. `packages.txt` automatically handles OpenCV system libraries (`libgl1-mesa-glx`, `libglib2.0-0`).
 
 ---
 
@@ -82,75 +121,51 @@ Place your YOLOv8 weights at `models/best.pt`. The app detects the file automati
 
 ```
 urbanlens/
-├── app.py                  # Entry point, login gate, navigation
-├── pages/                  # One file per page
+├── app.py                  # Entry point, login gate, role-based navigation
+├── test_core.py            # Core engine unit tests (7/7 passing)
+├── test_gemini.py          # Gemini & hybrid unit tests (9/9 passing)
+├── seed.py                 # DB initialization and Indore seed dataset
+├── Dockerfile              # Container deployment
+├── requirements.txt        # Pinned dependencies
+├── packages.txt            # System dependencies for cloud deployment
 ├── core/
-│   ├── auth.py             # Login, session, role checks
-│   ├── db.py               # All DB access + RBAC enforcement
-│   ├── detect.py           # YOLOv8 inference
-│   ├── geo.py              # EXIF GPS, haversine, location lookup
-│   ├── score.py            # Severity + priority scoring
-│   ├── dedupe.py           # Haversine merge
-│   ├── audit.py            # Audit log helpers
-│   ├── notify.py           # Optional SMTP email
-│   └── config.py           # Weights, thresholds, landmarks
+│   ├── ai_assess.py        # Gemini vision assessment, bilingual summaries, weekly brief
+│   ├── gemini_client.py    # Google GenAI SDK wrapper, caching, exponential backoff
+│   ├── auth.py             # Bcrypt hashing & session security
+│   ├── db.py               # SQLite storage + internal RBAC check enforcement
+│   ├── detect.py           # Hybrid YOLOv8 + Gemini detection engine
+│   ├── geo.py              # EXIF GPS parser & Indore landmark proximity lookup
+│   ├── score.py            # Explainable severity & priority formulas
+│   ├── dedupe.py           # 10 m Haversine spatial duplicate merger
+│   ├── audit.py            # Immutable system audit trail & timeline helpers
+│   ├── notify.py           # Optional SMTP notification dispatcher
+│   └── config.py           # Thresholds, landmarks, Gemini models, detector modes
 ├── ui/
-│   ├── theme.py            # CSS injection, color tokens
-│   └── components.py       # KPI cards, badges, timeline, header
-├── assets/                 # logo.png, icon.png
-├── models/                 # best.pt (custom weights)
-├── data/samples/           # Placeholder annotated images
-├── seed.py                 # Demo data seeder
-├── requirements.txt
-├── packages.txt            # System deps for Streamlit Cloud
-└── Dockerfile
+│   ├── theme.py            # CSS injection, color tokens, responsive styling
+│   └── components.py       # KPI cards, badges, AI assessment cards, order stepper
+├── pages/
+│   ├── login.py            # Login portal with demo chips & guest bypass
+│   ├── overview.py         # Role-personalized operational dashboard
+│   ├── assistant.py        # "Ask UrbanLens" natural-language query assistant
+│   ├── report.py           # Hybrid issue upload, detection, and AI assessment
+│   ├── map.py              # Interactive CartoDB Folium map
+│   ├── queue.py            # Ranked repair queue with bulk actions & CSV export
+│   ├── issue_detail.py     # Deep inspection, bilingual summaries, order timeline
+│   ├── analytics.py        # Civic charts and executive weekly brief generator
+│   ├── my_reports.py       # Citizen order-tracking views
+│   ├── audit_log.py        # Admin searchable audit log with CSV export
+│   └── users.py            # Admin user and role management console
+├── scripts/
+│   └── test_gemini.py      # Live Gemini test and diagnostic utility
+└── assets/
+    ├── logo.png            # UrbanLens brand mark
+    └── icon.png            # Favicon and navigation icon
 ```
-
----
-
-## Role Permissions
-
-| Action               | Admin | Officer | Citizen | Guest |
-|----------------------|-------|---------|---------|-------|
-| View public map      | Y     | Y       | Y       | Y     |
-| Upload a report      | Y     | Y       | Y       | N     |
-| View repair queue    | Y     | Y       | Own     | N     |
-| Assign / set status  | Y     | Y       | N       | N     |
-| View analytics       | Y     | Y       | N       | N     |
-| View audit log       | Y     | N       | N       | N     |
-| Manage users         | Y     | N       | N       | N     |
-| Export CSV           | Y     | Y       | N       | N     |
-
-All permissions are enforced in `core/db.py` — UI hiding is convenience only.
-
----
-
-## Optional Email
-
-Set these environment variables to enable SMTP notifications:
-
-```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@email.com
-SMTP_PASS=your_app_password
-```
-
-If not set, email is silently skipped with no broken UI.
 
 ---
 
 ## Roadmap
-
-- MFA / OTP login
-- SMS and push notifications
-- FastAPI backend + WebSocket live updates
-- Kanban drag-and-drop repair board
-- PostgreSQL for production scale
-- Mobile-responsive PWA
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
+- MFA / OTP authentication for field officers.
+- SMS / WhatsApp push notifications for citizen report updates.
+- Fast, asynchronous WebSocket gateway for real-time fleet telematics.
+- PostgreSQL / PostGIS backend adapter for multi-city scaling.

@@ -46,12 +46,14 @@ import pages.analytics as analytics_page  # noqa: E402
 import pages.my_reports as my_reports_page  # noqa: E402
 import pages.audit_log as audit_page  # noqa: E402
 import pages.users as users_page  # noqa: E402
+import pages.assistant as assistant_page  # noqa: E402
 
 
 def _role_nav(role: str) -> list[tuple[str, str, object]]:
     """Return (icon_svg, label, page_module) list for the given role."""
     all_pages = [
         ("overview",  "Overview",       overview_page),
+        ("assistant", "Ask UrbanLens",  assistant_page),
         ("report",    "Report Issue",   report_page),
         ("map",       "Live Map",       map_page),
         ("queue",     "Repair Queue",   queue_page),
@@ -62,8 +64,8 @@ def _role_nav(role: str) -> list[tuple[str, str, object]]:
         ("users",     "Users & Roles",  users_page),
     ]
     visible = {
-        "admin":   {"overview","report","map","queue","detail","analytics","audit","users"},
-        "officer": {"overview","report","map","queue","detail","analytics"},
+        "admin":   {"overview","assistant","report","map","queue","detail","analytics","audit","users"},
+        "officer": {"overview","assistant","report","map","queue","detail","analytics"},
         "citizen": {"overview","report","map","my","detail"},
         "guest":   {"overview","map"},
     }.get(role, {"overview", "map"})

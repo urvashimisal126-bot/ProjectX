@@ -118,6 +118,73 @@ def render() -> None:
                 except PermissionError as e:
                     st.error(str(e))
 
+    # ── AI Assessment & Bilingual Summary Section ─────────────────────────────
+    import json
+    from ui.components import ai_assessment_card
+    from core.ai_assess import generate_bilingual_summary, assess_image
+
+    assess_data = None
+    if issue.get("ai_assessment"):
+        try:
+            assess_data = json.loads(issue["ai_assessment"])
+        except Exception:
+            assess_data = None
+
+    if assess_data:
+        st.markdown(f'<div style="margin-top:1.5rem"></div>', unsafe_allow_html=True)
+        model_tag = issue.get("ai_model") or "Google Gemini"
+        ai_assessment_card(assess_data, model_name=model_tag)
+
+        # Bilingual Summary Toggle (Step 6)
+        c_lang, c_sum = st.columns([1, 4])
+        with c_lang:
+            lang_choice = st.radio(
+                "Summary Language",
+                options=["English", "हिंदी (Hindi)"],
+                horizontal=False,
+                key=f"lang_choice_{issue_id}",
+            )
+        with c_sum:
+            lang_code = "hi" if "Hindi" in lang_choice else "en"
+            summary_text = generate_bilingual_summary(assess_data, language=lang_code, actor=user)
+            if summary_text:
+                st.markdown(
+                    f"""
+                    <div style="background:#FAFBFD;border-left:3px solid {TOKENS['deep_teal']};padding:0.75rem 1rem;border-radius:4px;font-size:13px;color:{TOKENS['navy']};line-height:1.5">
+                      <strong>Executive Summary ({lang_choice.split()[0]}):</strong> {summary_text}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f'<div style="font-size:12px;color:{TOKENS["muted"]};padding:0.5rem 0">'
+                    f'Summary unavailable. Direct assessment details shown above.</div>',
+                    unsafe_allow_html=True,
+                )
+
+    elif has_permission(user, "assign_status"):
+        # On-demand AI assessment button for officers
+        if st.button("Run Gemini Inspection Assessment", key=f"run_gemini_{issue_id}"):
+            with st.spinner("Analyzing issue image with Gemini…"):
+                img_path = issue.get("image_path", "")
+                if img_path and Path(img_path).exists():
+                    from PIL import Image as PILImage
+                    pil_img = PILImage.open(img_path)
+                    res_assess = assess_image(pil_img, actor=user)
+                    if res_assess:
+                        res_dict = res_assess.model_dump()
+                        from core.db import get_conn
+                        with get_conn() as conn:
+                            conn.execute(
+                                "UPDATE issues SET ai_assessment=?, ai_model=? WHERE id=?",
+                                (json.dumps(res_dict), "Google Gemini", issue_id),
+                            )
+                        st.success("AI Assessment completed and saved.")
+                        st.rerun()
+                    else:
+                        st.warning("AI assessment unavailable (offline or API key inactive).")
+
     # ── Tabs: Score Breakdown | Timeline | Comments ───────────────────────────
     tab_score, tab_timeline, tab_comments = st.tabs(["Score Breakdown", "Status Timeline", "Comments"])
 
