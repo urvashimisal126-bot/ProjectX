@@ -8,7 +8,7 @@ from __future__ import annotations
 import bcrypt
 import streamlit as st
 
-from core.db import get_user
+from core.db import get_user, has_permission
 from core.audit import log_audit
 
 

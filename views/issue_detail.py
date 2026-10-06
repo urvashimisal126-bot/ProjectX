@@ -10,11 +10,11 @@ from pathlib import Path
 import streamlit as st
 import plotly.graph_objects as go
 
-from core.auth import current_user, has_permission
+from core.auth import current_user
 from core.config import ISSUE_LABELS
 from core.db import (
     get_issue, get_comments, add_comment, update_issue_status,
-    get_issue_images, get_conn
+    get_issue_images, get_conn, has_permission
 )
 from core.audit import log_audit, issue_timeline
 from core.ai_assess import generate_bilingual_summary, assess_image
