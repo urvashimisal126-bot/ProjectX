@@ -112,9 +112,28 @@ class TestMapKit(unittest.TestCase):
         self.assertIsInstance(m, folium.Map)
         # Render HTML string
         rendered = m.get_root().render()
-        self.assertIn("CARTO", rendered)
-        self.assertIn("OpenStreetMap", rendered)
+        self.assertNotIn("cartocdn.com", rendered)
         self.assertIn("Map Legend", rendered)
+
+    def test_tile_health_check_drops_failing_layer(self):
+        from core.mapkit import check_tile_health, TILES_CONFIG
+        with patch("requests.get") as mock_get:
+            # Mock OSM returning 200 image/png, but open topo returning 500 error
+            def mock_req(url, headers, timeout):
+                mock_resp = MagicMock()
+                if "opentopomap" in url:
+                    mock_resp.status_code = 500
+                    mock_resp.headers = {"content-type": "text/html"}
+                    mock_resp.content = b"<html>Server Error</html>"
+                else:
+                    mock_resp.status_code = 200
+                    mock_resp.headers = {"content-type": "image/png"}
+                    mock_resp.content = b"\x89PNG\r\n\x1a\n..."
+                return mock_resp
+            mock_get.side_effect = mock_req
+            healthy = check_tile_health(timeout=1.0)
+            self.assertIn("osm", healthy)
+            self.assertNotIn("opentopo", healthy)
 
     @patch("core.geo._get_cached_area")
     def test_reverse_geocode_cache(self, mock_cached):
@@ -126,3 +145,4 @@ class TestMapKit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

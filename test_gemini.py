@@ -20,7 +20,7 @@ from core.gemini_client import generate_json, _compute_cache_key
 from core.detect import detect_image_pil, DetectionResult, Detection
 from core.score import compute_severity, compute_priority, severity_breakdown
 from core.db import init_db, has_permission
-from pages.assistant import QueryFilterParams, _parse_query_with_gemini
+from views.assistant import QueryFilterParams, _parse_query_with_gemini
 
 
 class TestGeminiIntegration(unittest.TestCase):

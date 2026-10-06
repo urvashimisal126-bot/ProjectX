@@ -46,8 +46,7 @@ def render() -> None:
 
     if DEMO_MODE:
         st.warning(
-            "**Demo mode:** YOLO model weights missing from models/best.pt. Using Gemini and synthetic bounding boxes.",
-            icon="⚠️",
+            "Demo mode: YOLO model weights missing from models/best.pt. Using Gemini and synthetic bounding boxes.",
         )
 
     uploaded = st.file_uploader(
@@ -228,8 +227,8 @@ def render() -> None:
     picker_map = folium.Map(
         location=[lat_val, lon_val],
         zoom_start=14,
-        tiles="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        attr='&copy; OpenStreetMap contributors &copy; CARTO',
+        tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     )
     folium.Marker(
         [lat_val, lon_val],

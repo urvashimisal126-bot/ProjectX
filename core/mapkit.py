@@ -33,37 +33,91 @@ SEV_MARKER_COLORS = {
 }
 STATUS_FIXED_COLOR = "#1B9C85"
 
-# ─── Tile Providers & Attributions ────────────────────────────────────────────
+# ─── Tile Providers & Attributions (100% Free & Key-less) ──────────────────────
 TILES_CONFIG = {
-    "positron": {
-        "name": "Light (CARTO Positron)",
-        "url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "attr": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "subdomains": "abcd",
-        "max_zoom": 20,
-    },
     "osm": {
         "name": "Streets (OpenStreetMap)",
-        "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "sample_url": "https://tile.openstreetmap.org/1/0/0.png",
         "attr": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         "subdomains": "abc",
         "max_zoom": 19,
     },
-    "dark": {
-        "name": "Dark (CARTO Dark Matter)",
-        "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        "attr": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "subdomains": "abcd",
-        "max_zoom": 20,
-    },
-    "satellite": {
-        "name": "Satellite (Esri Imagery)",
-        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "attr": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+    "esri_streets": {
+        "name": "Esri World Street Map",
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        "sample_url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/1/0/0",
+        "attr": "Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012",
         "subdomains": "abc",
         "max_zoom": 19,
     },
+    "esri_satellite": {
+        "name": "Satellite (Esri Imagery)",
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "sample_url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/1/0/0",
+        "attr": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and GIS User Community",
+        "subdomains": "abc",
+        "max_zoom": 19,
+    },
+    "opentopo": {
+        "name": "Topographic (OpenTopoMap)",
+        "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        "sample_url": "https://a.tile.opentopomap.org/1/0/0.png",
+        "attr": 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+        "subdomains": "abc",
+        "max_zoom": 17,
+    },
 }
+
+_HEALTHY_TILES: dict[str, dict] | None = None
+
+
+def check_tile_health(timeout: float = 3.0) -> dict[str, dict]:
+    """
+    Startup tile health check.
+    Requests one sample tile per layer. Drops any layer that fails or returns
+    an HTML/watermark error response, and logs it. Returns the healthy config.
+    """
+    global _HEALTHY_TILES
+    import requests
+    import logging
+
+    logger = logging.getLogger("urbanlens.mapkit")
+    healthy = {}
+    headers = {"User-Agent": "UrbanLens-CivicOps/1.0 (Infrastructure Monitoring)"}
+
+    for key, cfg in TILES_CONFIG.items():
+        sample_url = cfg.get("sample_url")
+        if not sample_url:
+            sample_url = cfg["url"].format(s="a", z=1, x=0, y=0)
+        try:
+            resp = requests.get(sample_url, headers=headers, timeout=timeout)
+            ctype = resp.headers.get("content-type", "").lower()
+            if resp.status_code == 200 and ("image" in ctype or "octet-stream" in ctype):
+                # Ensure no HTML error returned with 200
+                if b"<html" not in resp.content[:100].lower():
+                    healthy[key] = cfg
+                else:
+                    logger.warning(f"Tile layer {key} returned HTML response; dropped.")
+            else:
+                logger.warning(f"Tile layer {key} returned status {resp.status_code} ({ctype}); dropped.")
+        except Exception as e:
+            logger.warning(f"Tile layer {key} health check failed ({e}); dropped.")
+
+    if not healthy:
+        # Fallback to offline/safe OSM spec
+        healthy["osm"] = TILES_CONFIG["osm"]
+
+    _HEALTHY_TILES = healthy
+    return healthy
+
+
+def get_healthy_tiles() -> dict[str, dict]:
+    """Return cached healthy tiles or run health check if not yet run."""
+    global _HEALTHY_TILES
+    if _HEALTHY_TILES is None:
+        _HEALTHY_TILES = check_tile_health()
+    return _HEALTHY_TILES
 
 
 # ─── Thumbnail Data URI Generator (Cached in memory) ──────────────────────────
@@ -168,7 +222,7 @@ def _add_legend(m: folium.Map) -> None:
       <div style="margin-bottom:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1B9C85;margin-right:6px"></span>Fixed / Resolved</div>
       <div style="font-size:10px;color:#5B6B7F;border-top:1px solid #E3E8EF;padding-top:4px">
         Marker size = Priority score<br>
-        Tiles &copy; OpenStreetMap/CARTO
+        Tiles &copy; OpenStreetMap/Esri
       </div>
     </div>
     """
@@ -189,49 +243,36 @@ def build_map(
 ) -> folium.Map:
     """
     Build a production-grade Folium map for UrbanLens.
-    Supports switchable CARTO/OSM/Satellite layers, marker clustering,
+    Supports switchable OSM/Esri Streets/Esri Satellite/OpenTopoMap layers, marker clustering,
     heatmaps, XSS-safe popup cards, and corner legend.
     """
-    # Initialize base map with default Positron
-    pos = TILES_CONFIG["positron"]
+    healthy_tiles = get_healthy_tiles()
+
+    # Determine default base layer: OSM if available, otherwise Esri Streets, otherwise first available
+    primary_key = "osm" if "osm" in healthy_tiles else ("esri_streets" if "esri_streets" in healthy_tiles else list(healthy_tiles.keys())[0])
+    base_cfg = healthy_tiles[primary_key]
+
     m = folium.Map(
         location=list(center),
         zoom_start=zoom,
-        tiles=pos["url"],
-        attr=pos["attr"],
-        name=pos["name"],
+        tiles=base_cfg["url"],
+        attr=base_cfg["attr"],
+        name=base_cfg["name"],
         control_scale=True,
     )
 
-    # Add Streets layer (OpenStreetMap)
-    osm = TILES_CONFIG["osm"]
-    folium.TileLayer(
-        tiles=osm["url"],
-        attr=osm["attr"],
-        name=osm["name"],
-        subdomains=osm["subdomains"],
-        max_zoom=osm["max_zoom"],
-    ).add_to(m)
-
-    # Add Dark Matter layer
-    dark = TILES_CONFIG["dark"]
-    folium.TileLayer(
-        tiles=dark["url"],
-        attr=dark["attr"],
-        name=dark["name"],
-        subdomains=dark["subdomains"],
-        max_zoom=dark["max_zoom"],
-    ).add_to(m)
-
-    # Optional Satellite Layer
-    if enable_satellite and ENABLE_SATELLITE_LAYER:
-        sat = TILES_CONFIG["satellite"]
+    # Add other healthy tile layers for user switcher
+    for key, cfg in healthy_tiles.items():
+        if key == primary_key:
+            continue
+        if key == "esri_satellite" and not (enable_satellite and ENABLE_SATELLITE_LAYER):
+            continue
         folium.TileLayer(
-            tiles=sat["url"],
-            attr=sat["attr"],
-            name=sat["name"],
-            subdomains=sat["subdomains"],
-            max_zoom=sat["max_zoom"],
+            tiles=cfg["url"],
+            attr=cfg["attr"],
+            name=cfg["name"],
+            subdomains=cfg.get("subdomains", "abc"),
+            max_zoom=cfg.get("max_zoom", 19),
         ).add_to(m)
 
     # Add Optional GeoJSON Ward layer if file exists

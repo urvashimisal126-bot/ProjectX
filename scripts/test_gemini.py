@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.config import GEMINI_API_KEY, GEMINI_MODEL, DETECTOR
 from core.gemini_client import get_client, generate_json
 from core.ai_assess import assess_image, AIAssessment, generate_bilingual_summary, generate_weekly_brief
-from pages.assistant import _parse_query_with_gemini
+from views.assistant import _parse_query_with_gemini
 
 
 def print_banner(text: str):

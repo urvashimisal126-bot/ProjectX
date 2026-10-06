@@ -27,93 +27,167 @@ TOKENS = {
 }
 
 
-def inject_css() -> None:
-    """Inject all custom CSS into the Streamlit app."""
+def inject_css(hide_sidebar: bool = False) -> None:
+    """Inject global custom CSS into the Streamlit app."""
+    sidebar_hide_rule = ""
+    if hide_sidebar:
+        sidebar_hide_rule = """
+        section[data-testid="stSidebar"],
+        [data-testid="stSidebarCollapsedControl"] {
+            display: none !important;
+        }
+        """
+
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-        /* ── Reset & base ── */
-        html, body, [class*="css"] {{
-            font-family: 'Inter', sans-serif !important;
-            color: {TOKENS['navy']};
+        /* ── Reset & Typography ── */
+        html, body, [class*="css"], .stMarkdown, p, div, span, label, input, button, select, textarea {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        }}
+        body {{
+            font-size: 16px !important;
+            color: {TOKENS['navy']} !important;
         }}
 
-        /* Hide Streamlit chrome */
-        #MainMenu, footer, .stDeployButton,
-        header[data-testid="stHeader"] {{ display: none !important; }}
+        /* ── Chrome Hiding (Keep sidebar collapse arrow functional) ── */
+        #MainMenu {{ display: none !important; }}
+        footer {{ display: none !important; }}
+        .stDeployButton {{ display: none !important; }}
+        div[data-testid="stDecoration"] {{ display: none !important; }}
+        header[data-testid="stHeader"] {{
+            background: transparent !important;
+            height: 3rem !important;
+        }}
+        header[data-testid="stHeader"] .stToolbarActions,
+        header[data-testid="stHeader"] .stStatusWidget,
+        header[data-testid="stHeader"] [data-testid="stToolbar"] {{
+            display: none !important;
+        }}
+        /* Keep sidebar toggle button visible and styled cleanly */
+        button[data-testid="stSidebarCollapseButton"],
+        button[data-testid="baseButton-header"],
+        [data-testid="stSidebarCollapsedControl"] button {{
+            color: {TOKENS['navy']} !important;
+            background: rgba(255, 255, 255, 0.9) !important;
+            border: 1px solid {TOKENS['border']} !important;
+            border-radius: 6px !important;
+            visibility: visible !important;
+        }}
 
-        /* ── App background ── */
+        {sidebar_hide_rule}
+
+        /* ── App background & layout ── */
         .stApp {{
             background: {TOKENS['bg']} !important;
         }}
+        .main .block-container {{
+            padding-top: 1.8rem !important;
+            padding-bottom: 3rem !important;
+            max-width: 1400px !important;
+        }}
 
-        /* ── Sidebar ── */
+        /* ── Sidebar Styling ── */
         section[data-testid="stSidebar"] {{
             background: {TOKENS['navy']} !important;
-            border-right: 1px solid #0a1e38;
+            border-right: 1px solid #081a30 !important;
+            width: 270px !important;
         }}
         section[data-testid="stSidebar"] * {{
-            color: #d6e4f7 !important;
+            color: #d6e4f7;
         }}
         section[data-testid="stSidebar"] a {{
             color: #9ac4e8 !important;
         }}
-        section[data-testid="stSidebar"] .stButton > button {{
+
+        /* Navigation items in sidebar */
+        .sidebar-nav-btn button {{
             background: transparent !important;
-            border: 1px solid rgba(255,255,255,0.15) !important;
+            border: none !important;
+            border-left: 3px solid transparent !important;
+            border-radius: 0 6px 6px 0 !important;
             color: #d6e4f7 !important;
-            width: 100%;
-            text-align: left;
+            font-size: 17px !important;
+            font-weight: 500 !important;
+            padding: 0.65rem 1rem !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            width: 100% !important;
+            transition: all 0.15s ease-in-out !important;
         }}
-        section[data-testid="stSidebar"] .stButton > button:hover {{
-            background: rgba(255,255,255,0.08) !important;
+        .sidebar-nav-btn button:hover {{
+            background: rgba(255, 255, 255, 0.08) !important;
+            color: #ffffff !important;
+        }}
+        .sidebar-nav-active button {{
+            background: rgba(27, 156, 133, 0.22) !important;
+            border-left: 3.5px solid {TOKENS['teal']} !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
         }}
 
-        /* ── Primary button ── */
-        .stButton > button[kind="primary"],
+        /* ── Button Hierarchy ── */
         .stButton > button {{
-            background: {TOKENS['teal_deep']} !important;
-            color: #fff !important;
-            border: none !important;
-            border-radius: 6px !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 15px !important;
             font-weight: 600 !important;
-            font-size: 14px !important;
-            padding: 0.45rem 1.1rem !important;
-            transition: background 0.15s;
+            border-radius: 8px !important;
+            padding: 0.55rem 1.25rem !important;
+            transition: all 0.18s ease-in-out !important;
         }}
-        .stButton > button:hover {{
+        /* Primary: Solid Deep Teal */
+        .stButton > button[kind="primary"],
+        .btn-primary > button,
+        .btn-primary {{
+            background: {TOKENS['teal_deep']} !important;
+            color: #ffffff !important;
+            border: 1px solid {TOKENS['teal_deep']} !important;
+            box-shadow: 0 1px 2px rgba(11,37,69,0.08) !important;
+        }}
+        .stButton > button[kind="primary"]:hover,
+        .btn-primary > button:hover {{
             background: {TOKENS['teal']} !important;
+            border-color: {TOKENS['teal']} !important;
+            box-shadow: 0 3px 6px rgba(19,111,99,0.18) !important;
         }}
-        /* Secondary buttons via container class */
+        /* Secondary: Clean Outlined */
+        .stButton > button[kind="secondary"],
         .btn-secondary > button {{
-            background: #fff !important;
+            background: #ffffff !important;
             color: {TOKENS['teal_deep']} !important;
             border: 1.5px solid {TOKENS['teal_deep']} !important;
         }}
+        .stButton > button[kind="secondary"]:hover,
         .btn-secondary > button:hover {{
             background: #edf7f5 !important;
+            border-color: {TOKENS['teal']} !important;
+            color: {TOKENS['teal']} !important;
         }}
         /* Destructive */
         .btn-danger > button {{
-            background: #fff !important;
+            background: #ffffff !important;
             color: {TOKENS['high']} !important;
             border: 1.5px solid {TOKENS['high']} !important;
         }}
+        .btn-danger > button:hover {{
+            background: #fdf0ef !important;
+        }}
 
-        /* ── Inputs ── */
+        /* ── Form Inputs ── */
         .stTextInput input, .stTextArea textarea,
         .stSelectbox select, div[data-baseweb="select"] {{
             border: 1px solid {TOKENS['border']} !important;
-            border-radius: 6px !important;
-            background: #fff !important;
-            font-size: 14px !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            font-size: 15px !important;
             color: {TOKENS['navy']} !important;
+            padding: 0.5rem 0.75rem !important;
         }}
         .stTextInput input:focus, .stTextArea textarea:focus {{
             border-color: {TOKENS['teal_deep']} !important;
-            box-shadow: 0 0 0 3px rgba(19,111,99,0.12) !important;
+            box-shadow: 0 0 0 3px rgba(19, 111, 99, 0.12) !important;
             outline: none !important;
         }}
         label, .stLabel {{
@@ -122,85 +196,53 @@ def inject_css() -> None:
             color: {TOKENS['muted']} !important;
             text-transform: uppercase;
             letter-spacing: 0.04em;
+            margin-bottom: 4px !important;
         }}
 
-        /* ── Tabs ── */
-        .stTabs [data-baseweb="tab-list"] {{
-            gap: 0;
-            border-bottom: 2px solid {TOKENS['border']};
-            background: transparent;
+        /* ── Cards & Surfaces ── */
+        .urban-card {{
+            background: {TOKENS['surface']};
+            border: 1px solid {TOKENS['border']};
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(11,37,69,0.04);
+            margin-bottom: 1rem;
         }}
-        .stTabs [data-baseweb="tab"] {{
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            color: {TOKENS['muted']} !important;
-            padding: 0.5rem 1rem !important;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            background: transparent !important;
-        }}
-        .stTabs [aria-selected="true"] {{
-            color: {TOKENS['teal_deep']} !important;
-            border-bottom: 2px solid {TOKENS['teal_deep']} !important;
+        .urban-card-equal {{
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }}
 
-        /* ── Dataframe / table ── */
+        /* ── Tables & Dataframes ── */
         .stDataFrame thead th {{
             background: {TOKENS['bg']} !important;
-            font-size: 12px !important;
+            font-size: 13px !important;
             font-weight: 700 !important;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.04em;
             color: {TOKENS['muted']} !important;
+            padding: 10px 12px !important;
         }}
         .stDataFrame tbody tr:hover td {{
             background: #edf3fb !important;
         }}
+        .stDataFrame td {{
+            font-size: 15px !important;
+            color: {TOKENS['navy']} !important;
+        }}
 
-        /* ── Expander ── */
+        /* ── Expanders & Modals ── */
         .stExpander {{
             border: 1px solid {TOKENS['border']} !important;
             border-radius: 8px !important;
+            background: #ffffff !important;
         }}
         .stExpander summary {{
-            font-size: 13px !important;
-            font-weight: 600 !important;
-        }}
-
-        /* ── Metric ── */
-        div[data-testid="metric-container"] {{
-            background: #fff;
-            border: 1px solid {TOKENS['border']};
-            border-radius: 10px;
-            padding: 1rem 1.2rem;
-        }}
-
-        /* ── Alerts / status messages ── */
-        div[data-testid="stAlert"] {{
-            border-radius: 8px !important;
             font-size: 14px !important;
-        }}
-
-        /* ── Slider ── */
-        .stSlider [data-testid="stSlider"] {{
-            accent-color: {TOKENS['teal_deep']};
-        }}
-
-        /* ── File uploader ── */
-        section[data-testid="stFileUploadDropzone"] {{
-            border: 2px dashed {TOKENS['border']} !important;
-            border-radius: 10px !important;
-            background: {TOKENS['bg']} !important;
-        }}
-
-        /* ── Progress bar ── */
-        .stProgress > div > div {{
-            background: {TOKENS['teal_deep']} !important;
-        }}
-
-        /* ── Spinner ── */
-        .stSpinner > div {{
-            border-top-color: {TOKENS['teal_deep']} !important;
+            font-weight: 600 !important;
+            color: {TOKENS['navy']} !important;
         }}
 
         /* ── Tabular numbers ── */
@@ -208,17 +250,24 @@ def inject_css() -> None:
 
         /* ── Live indicator ── */
         @keyframes pulse-live {{
-            0%, 100% {{ opacity: 1; }}
-            50%       {{ opacity: 0.3; }}
+            0%, 100% {{ opacity: 1; transform: scale(1); }}
+            50%       {{ opacity: 0.35; transform: scale(0.9); }}
         }}
         .live-dot {{
             display: inline-block;
-            width: 8px; height: 8px;
+            width: 9px; height: 9px;
             border-radius: 50%;
             background: #2E9E6B;
             animation: pulse-live 1.8s ease-in-out infinite;
             vertical-align: middle;
-            margin-right: 5px;
+            margin-right: 6px;
+        }}
+
+        @media (prefers-reduced-motion: reduce) {{
+            .live-dot, .hero-watermark, .fade-in-card {{
+                animation: none !important;
+                transition: none !important;
+            }}
         }}
         </style>
         """,

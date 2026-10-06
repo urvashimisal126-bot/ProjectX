@@ -10,13 +10,12 @@ Built for **Hacktoberfest '26** (AITR ACM × MLH) · *Best Open-Source AI Projec
 
 ## Features
 
-- **Hybrid AI Detection & Inspection** — YOLOv8 for rapid bounding boxes coupled with Google Gemini for rich qualitative assessment, hazard verification, and recommended municipal repair actions.
-- **"Ask UrbanLens" Natural-Language Assistant** — Translates complex natural-language civic questions into live, role-checked database filter queries.
-- **Bilingual Civic Summaries** — Executive 2-sentence condition summaries in English and Hindi (हिंदी) directly on issue detail records.
-- **Executive Weekly Briefs** — Synthesizes narrative operational summaries based strictly on verified database numbers.
+- **100% Free Interactive MapKit** — Key-less OpenStreetMap standard, Esri World Street Map, Esri World Imagery (satellite), and OpenTopoMap layers with automatic startup tile health verification.
+- **Rebuilt Landing & Split-Screen Login** — Full-viewport animated landing page with live database metrics and one-click demo login chips.
+- **Role-Based Navigation (views/)** — Clean, role-filtered navigation via `st.navigation` with zero raw page auto-discovery leakage.
+- **Issue Inspection Dialogs** — Inspect annotated images, AI qualitative assessments, score breakdowns, and status timeliners inside large modal dialogs.
 - **Smart Scoring Formula** — Deterministic severity ($0.5 \times \text{area} + 0.3 \times \text{confidence} + 0.2 \times \text{count}$) and location-multiplier priority (1.5× near hospitals/schools, 1.3× on highways).
 - **Auto-Deduplication** — Reports within 10 m radius of the same hazard type automatically merge with an updated counter.
-- **Live Interactive Map** — CartoDB Positron basemap with severity-colored markers and issue inspection popups.
 - **Ranked Repair Queue** — Dense, filterable table with bulk actions, status transitions, and CSV exports.
 - **Backend-Enforced RBAC** — Admin, Officer, Citizen, Guest roles with internal checks inside `core/db.py`.
 - **Immutable Audit Trail** — Tracks every login, denied action, upload, merge, assignment, and export.
