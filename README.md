@@ -1,163 +1,156 @@
-# 🔍 UrbanLens
+# UrbanLens
 
-**Seeing what the city needs fixed.**
+> **Seeing what the city needs fixed.**
 
-UrbanLens is an open-source AI system that detects, classifies and prioritizes public infrastructure issues (potholes, damaged roads, broken streetlights, overflowing drains) from photos or video, and turns them into a **ranked, geotagged repair queue**.
+UrbanLens is an open-source AI system for municipal teams. It detects, classifies and prioritizes public infrastructure issues — potholes, road damage, broken streetlights, overflowing drains — from photos or video, geotags them, merges duplicates, and displays a ranked repair queue on a live, role-based dashboard with a full audit trail.
 
-Built for **Hacktoberfest '26** (AITR ACM x MLH) · Problem Statement 1: *AI-Powered Public Infrastructure Monitoring*
-
-![demo](docs/demo.gif)
-<!-- Replace with your demo GIF -->
-
-**Live demo:** `<Streamlit Cloud URL>`
+Built for **Hacktoberfest '26** (AITR ACM × MLH) · *Best Open-Source AI Project — Problem Statement 1: AI-Powered Public Infrastructure Monitoring*
 
 ---
 
-## 🚨 The Problem
-Infrastructure issues are reported late or never. Reports are vague, duplicates pile up, and crews fix what is complained about loudest, not what is most dangerous. Detection, classification and prioritization are manual, slow and inconsistent.
+## Features
 
-**Who is affected:** commuters, pedestrians, residents, municipal staff and city budgets.
+- **AI Detection** — YOLOv8 on uploaded images or video; falls back to Demo Mode if no custom model is present
+- **Smart Scoring** — severity from area coverage, confidence and detection count; priority multiplied by location type (school/hospital/highway)
+- **Auto-Deduplication** — same issue within 10 m is merged; report count tracked
+- **Live Map** — CartoDB Positron basemap, severity-colored markers, image popups
+- **Repair Queue** — ranked, filterable table with inline status updates and CSV export
+- **Role-Based Access** — Admin, Officer, Citizen, Guest — enforced in the DB layer, not just the UI
+- **Audit Trail** — every login, upload, assignment, merge, and export logged
+- **Analytics** — issue trends, severity split, status funnel, time-to-fix, hotspot chart
+- **Comments** — threaded comments on each issue, visible to all permitted users
+- **Optional Email** — SMTP alert to admins for High-severity issues
 
-## 💡 Our Solution
-Upload a photo or clip → AI detects the issue → severity and priority are scored → duplicates are merged → issues appear on a map and a ranked repair queue.
+---
 
-| Today | With UrbanLens |
-|---|---|
-| Days or weeks to notice | Detection in seconds |
-| Manual site verification | Photo evidence plus GPS |
-| Guesswork priority | Transparent scoring formula |
-| Duplicate complaints | Auto-merged by location |
+## Demo Credentials
 
-## ✨ Features
-- 📷 Image and video upload
-- 🤖 YOLOv8 damage detection and classification
-- 📊 Severity score (Low / Medium / High)
-- 📍 GPS from EXIF with manual location fallback
-- 🗺️ Interactive map dashboard with colour-coded pins
-- 📋 Priority-ranked repair queue
-- 🏫 Location risk boost (schools, hospitals, highways)
-- 🔁 Duplicate merging (same class within ~10 m)
-- ✅ Status tracking: Reported → Assigned → Fixed
-- 📥 CSV export
-- 🔐 Role-based access (Admin, Officer, Citizen, Guest) with a personalised dashboard per role
-- 🛡️ Permissions enforced in the backend, not just hidden in the UI
-- 🧾 Audit log and an order-tracking style status timeline per issue
-- 🔎 Drill-down filters by type, severity, status and date
-- ⚡ Live dashboard refresh without a page reload
-- 📈 Charts: issues by type, severity split, resolved over time
-- ✉️ Optional email alert for High-severity issues
-- ☁️ Cloud deployment
+| Role    | Username  | Password    |
+|---------|-----------|-------------|
+| Admin   | admin     | admin123    |
+| Officer | officer1  | officer123  |
+| Officer | officer2  | officer123  |
+| Citizen | citizen1  | citizen123  |
 
-## 🏗️ Architecture
-```
-Login (auth.py, RBAC) → Streamlit UI → detect.py (YOLOv8) → geo.py (EXIF/GPS) → score.py → dedupe.py → db.py (SQLite, permission checks) → audit.py → Role-based dashboard (live refresh)
-```
+A "Continue as Guest" option is available on the login page (read-only public map).
 
-## 🧰 Tech Stack
-Python · Streamlit · Ultralytics YOLOv8 · SQLite · Folium · Plotly · Pillow · OpenCV · pandas
+---
 
-## 🚀 Quick Start
+## Quick Start
+
 ```bash
-git clone https://github.com/<your-username>/urbanlens.git
-cd urbanlens
+# 1. Clone
+git clone https://github.com/urvashimisal126-bot/ProjectX.git
+cd ProjectX
+
+# 2. Install
 pip install -r requirements.txt
-python seed.py        # creates demo users and sample issues
+
+# 3. Run (DB and seed created automatically on first launch)
 streamlit run app.py
 ```
-Place model weights at `models/best.pt` (see [Model](#-model)).
 
-**Docker (optional):**
+Open http://localhost:8501 in your browser.
+
+---
+
+## Docker
+
 ```bash
 docker build -t urbanlens .
 docker run -p 8501:8501 urbanlens
 ```
 
-## 👤 Roles and Demo Accounts
+---
 
-| Role | What they can do |
-|---|---|
-| **Admin** | Everything: manage users, view audit log, analytics, export |
-| **Officer (Editor)** | View queue, filter, assign and update status, export |
-| **Citizen (Viewer)** | Report issues, track own reports on a status timeline |
-| **Guest** | Read-only public map |
+## Deploy to Streamlit Community Cloud
 
-Demo logins are created by `seed.py` (usernames and passwords: `<fill in>`). Change them before any real deployment.
+1. Push this repository to GitHub (public or private).
+2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo.
+3. Set **Main file path** to `app.py`.
+4. The `packages.txt` file handles system dependencies (OpenCV).
 
-## 📁 Project Structure
+---
+
+## Custom Model
+
+Place your YOLOv8 weights at `models/best.pt`. The app detects the file automatically and exits Demo Mode. The class list is configured in `core/config.py` (`ISSUE_CLASSES`).
+
+---
+
+## Project Structure
+
 ```
 urbanlens/
-├── app.py            # Streamlit UI
-├── detect.py         # YOLOv8 inference
-├── geo.py            # EXIF GPS and location helpers
-├── score.py          # Severity and priority scoring
-├── dedupe.py         # Haversine duplicate merge
-├── db.py             # SQLite operations with permission checks
-├── auth.py           # Login and role-based access control
-├── audit.py          # Audit log and status timeline
-├── seed.py           # Demo users and sample issues
-├── config.py         # Thresholds and weights
-├── models/           # best.pt
-├── data/             # sample images, issues.db
-├── docs/             # PRD, demo GIF
+├── app.py                  # Entry point, login gate, navigation
+├── pages/                  # One file per page
+├── core/
+│   ├── auth.py             # Login, session, role checks
+│   ├── db.py               # All DB access + RBAC enforcement
+│   ├── detect.py           # YOLOv8 inference
+│   ├── geo.py              # EXIF GPS, haversine, location lookup
+│   ├── score.py            # Severity + priority scoring
+│   ├── dedupe.py           # Haversine merge
+│   ├── audit.py            # Audit log helpers
+│   ├── notify.py           # Optional SMTP email
+│   └── config.py           # Weights, thresholds, landmarks
+├── ui/
+│   ├── theme.py            # CSS injection, color tokens
+│   └── components.py       # KPI cards, badges, timeline, header
+├── assets/                 # logo.png, icon.png
+├── models/                 # best.pt (custom weights)
+├── data/samples/           # Placeholder annotated images
+├── seed.py                 # Demo data seeder
 ├── requirements.txt
-├── CONTRIBUTING.md
-└── LICENSE
+├── packages.txt            # System deps for Streamlit Cloud
+└── Dockerfile
 ```
 
-## 🧠 Model
-- Base: pretrained YOLOv8n/s, fine-tuned on public road-damage and pothole datasets.
-- Classes: pothole + <add your classes>. More classes are easy to add (see Contributing).
-- Training notebook: `notebooks/train.ipynb` (Google Colab).
-- Metrics: mAP@0.5 = `<fill in>` · Precision = `<fill in>` · Recall = `<fill in>`
+---
 
-## 📐 Scoring Logic
+## Role Permissions
+
+| Action               | Admin | Officer | Citizen | Guest |
+|----------------------|-------|---------|---------|-------|
+| View public map      | Y     | Y       | Y       | Y     |
+| Upload a report      | Y     | Y       | Y       | N     |
+| View repair queue    | Y     | Y       | Own     | N     |
+| Assign / set status  | Y     | Y       | N       | N     |
+| View analytics       | Y     | Y       | N       | N     |
+| View audit log       | Y     | N       | N       | N     |
+| Manage users         | Y     | N       | N       | N     |
+| Export CSV           | Y     | Y       | N       | N     |
+
+All permissions are enforced in `core/db.py` — UI hiding is convenience only.
+
+---
+
+## Optional Email
+
+Set these environment variables to enable SMTP notifications:
+
 ```
-severity = 0.5 * norm(area_ratio) + 0.3 * confidence + 0.2 * norm(count)
-priority = severity * location_multiplier * (1 + 0.1 * (report_count - 1))
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@email.com
+SMTP_PASS=your_app_password
 ```
-Location multiplier: school/hospital = 1.5, highway = 1.3, default = 1.0. Weights live in `config.py`.
 
-## 🗃️ Datasets
-- RDD2022 (road damage) — `<link>`
-- Pothole dataset — `<link>`
+If not set, email is silently skipped with no broken UI.
 
-Check each dataset's license before reuse.
+---
 
-## 🤝 Contributing
-We welcome contributions. Good first issues:
-- Add a new class (cracks, waterlogging, garbage)
-- Add a new dataset or improve accuracy
-- Tune the scoring weights
-- Add unit tests
-- Add a Hindi UI
+## Roadmap
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+- MFA / OTP login
+- SMS and push notifications
+- FastAPI backend + WebSocket live updates
+- Kanban drag-and-drop repair board
+- PostgreSQL for production scale
+- Mobile-responsive PWA
 
-## 🛣️ Roadmap
-- Multi-factor authentication (OTP), verification and password-reset emails
-- SMS and mobile push notifications
-- FastAPI + Socket.IO backend and React frontend with Kanban drag-drop
-- PostgreSQL on cloud for persistent storage
-- Real-time CCTV, dashcam and drone feeds
-- Mobile app for citizen reporting
-- Municipal portal integration
-- Predictive maintenance and hotspot analytics
-- Privacy blurring for faces and number plates
+---
 
-## ⚠️ Limitations
-- Accuracy depends on training data; some classes have limited data.
-- Photos without GPS need a manual location.
-- Scoring weights are heuristic and should be tuned with real municipal data.
-- Live refresh uses periodic updates over Streamlit's WebSocket, not a custom WebSocket server.
-- Demo authentication has no MFA or password reset yet.
-- SQLite data resets on some cloud redeploys; `seed.py` restores the demo data.
+## License
 
-## 👥 Team
-- `<Name>` — `<role>` · [GitHub](https://github.com/)
-- `<Name>` — `<role>` · [GitHub](https://github.com/)
-
-## 📄 License
-Released under the [MIT License](LICENSE).
-
-## 🙏 Acknowledgements
-AITR ACM, ACM-W, ACM SIGAI, Major League Hacking, Ultralytics, and the open datasets used.
+MIT — see [LICENSE](LICENSE)
