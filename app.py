@@ -5,6 +5,7 @@ Main application router and role-based navigation orchestrator.
 
 from __future__ import annotations
 
+import functools
 import os
 from pathlib import Path
 
@@ -51,8 +52,11 @@ import views.users as users_view
 import views.issue_detail as issue_detail_view
 
 
-def _wrap_safe(render_fn, title: str):
-    """Wrap view execution in a safety net that displays a friendly error card instead of a blank page."""
+def _wrap_safe(render_fn, title: str, slug: str):
+    """
+    Wrap view execution in a safety net with a unique callable name and error boundary.
+    Prevents Streamlit URL pathname collision and replaces crashes with friendly error cards.
+    """
     def _safe_runner():
         try:
             render_fn()
@@ -67,13 +71,13 @@ def _wrap_safe(render_fn, title: str):
                 "An unexpected issue occurred while rendering this view. Your data is safe.",
                 exc=exc,
             )
+    _safe_runner.__name__ = f"view_{slug.replace('-', '_')}"
     return _safe_runner
 
 
 # ── 6. Top Sidebar Branding & User Controls ───────────────────────────────────
 def _render_sidebar_header():
     """Render crisp logo icon and white wordmark at the top of the navy sidebar."""
-    icon_path = Path("assets/icon.png")
     st.sidebar.markdown(
         f"""
         <div style="display:flex;align-items:center;gap:12px;padding:0.75rem 0.25rem 1.25rem 0.25rem;border-bottom:1px solid rgba(255,255,255,0.12);margin-bottom:0.75rem">
@@ -138,41 +142,41 @@ else:
 
     _render_sidebar_header()
 
-    # Build Navigation Pages per Role
+    # Build Navigation Pages per Role with unique url_paths
     if role == "guest":
         pages = [
-            st.Page(_wrap_safe(map_view.render, "Public Map"), title="Public Map", icon=":material/map:", default=True),
-            st.Page(_wrap_safe(login_view.render, "Sign In"), title="Sign In", icon=":material/login:"),
+            st.Page(_wrap_safe(map_view.render, "Public Map", "public_map"), title="Public Map", icon=":material/map:", url_path="map", default=True),
+            st.Page(_wrap_safe(login_view.render, "Sign In", "guest_signin"), title="Sign In", icon=":material/login:", url_path="login"),
         ]
     elif role == "citizen":
         pages = [
-            st.Page(_wrap_safe(overview_view.render, "Dashboard"), title="Dashboard", icon=":material/dashboard:", default=True),
-            st.Page(_wrap_safe(report_view.render, "Report Issue"), title="Report Issue", icon=":material/add_a_photo:"),
-            st.Page(_wrap_safe(my_reports_view.render, "My Reports"), title="My Reports", icon=":material/folder_open:"),
-            st.Page(_wrap_safe(map_view.render, "Live Map"), title="Live Map", icon=":material/map:"),
+            st.Page(_wrap_safe(overview_view.render, "Dashboard", "cit_dashboard"), title="Dashboard", icon=":material/dashboard:", url_path="dashboard", default=True),
+            st.Page(_wrap_safe(report_view.render, "Report Issue", "cit_report"), title="Report Issue", icon=":material/add_a_photo:", url_path="report"),
+            st.Page(_wrap_safe(my_reports_view.render, "My Reports", "cit_my_reports"), title="My Reports", icon=":material/folder_open:", url_path="my-reports"),
+            st.Page(_wrap_safe(map_view.render, "Live Map", "cit_map"), title="Live Map", icon=":material/map:", url_path="map"),
         ]
     elif role == "officer":
         pages = [
-            st.Page(_wrap_safe(overview_view.render, "Dashboard"), title="Dashboard", icon=":material/dashboard:", default=True),
-            st.Page(_wrap_safe(map_view.render, "Live Map"), title="Live Map", icon=":material/map:"),
-            st.Page(_wrap_safe(queue_view.render, "Repair Queue"), title="Repair Queue", icon=":material/format_list_numbered:"),
-            st.Page(_wrap_safe(analytics_view.render, "Analytics"), title="Analytics", icon=":material/analytics:"),
-            st.Page(_wrap_safe(assistant_view.render, "Ask UrbanLens"), title="Ask UrbanLens", icon=":material/search:"),
-            st.Page(_wrap_safe(report_view.render, "Report Issue"), title="Report Issue", icon=":material/add_a_photo:"),
+            st.Page(_wrap_safe(overview_view.render, "Dashboard", "off_dashboard"), title="Dashboard", icon=":material/dashboard:", url_path="dashboard", default=True),
+            st.Page(_wrap_safe(map_view.render, "Live Map", "off_map"), title="Live Map", icon=":material/map:", url_path="map"),
+            st.Page(_wrap_safe(queue_view.render, "Repair Queue", "off_queue"), title="Repair Queue", icon=":material/format_list_numbered:", url_path="queue"),
+            st.Page(_wrap_safe(analytics_view.render, "Analytics", "off_analytics"), title="Analytics", icon=":material/analytics:", url_path="analytics"),
+            st.Page(_wrap_safe(assistant_view.render, "Ask UrbanLens", "off_assistant"), title="Ask UrbanLens", icon=":material/search:", url_path="assistant"),
+            st.Page(_wrap_safe(report_view.render, "Report Issue", "off_report"), title="Report Issue", icon=":material/add_a_photo:", url_path="report"),
         ]
     else:  # Admin
         pages = {
             "Operations": [
-                st.Page(_wrap_safe(overview_view.render, "Dashboard"), title="Dashboard", icon=":material/dashboard:", default=True),
-                st.Page(_wrap_safe(map_view.render, "Live Map"), title="Live Map", icon=":material/map:"),
-                st.Page(_wrap_safe(queue_view.render, "Repair Queue"), title="Repair Queue", icon=":material/format_list_numbered:"),
-                st.Page(_wrap_safe(analytics_view.render, "Analytics"), title="Analytics", icon=":material/analytics:"),
-                st.Page(_wrap_safe(assistant_view.render, "Ask UrbanLens"), title="Ask UrbanLens", icon=":material/search:"),
-                st.Page(_wrap_safe(report_view.render, "Report Issue"), title="Report Issue", icon=":material/add_a_photo:"),
+                st.Page(_wrap_safe(overview_view.render, "Dashboard", "adm_dashboard"), title="Dashboard", icon=":material/dashboard:", url_path="dashboard", default=True),
+                st.Page(_wrap_safe(map_view.render, "Live Map", "adm_map"), title="Live Map", icon=":material/map:", url_path="map"),
+                st.Page(_wrap_safe(queue_view.render, "Repair Queue", "adm_queue"), title="Repair Queue", icon=":material/format_list_numbered:", url_path="queue"),
+                st.Page(_wrap_safe(analytics_view.render, "Analytics", "adm_analytics"), title="Analytics", icon=":material/analytics:", url_path="analytics"),
+                st.Page(_wrap_safe(assistant_view.render, "Ask UrbanLens", "adm_assistant"), title="Ask UrbanLens", icon=":material/search:", url_path="assistant"),
+                st.Page(_wrap_safe(report_view.render, "Report Issue", "adm_report"), title="Report Issue", icon=":material/add_a_photo:", url_path="report"),
             ],
             "Administration": [
-                st.Page(_wrap_safe(audit_log_view.render, "Audit Log"), title="Audit Log", icon=":material/history:"),
-                st.Page(_wrap_safe(users_view.render, "Users & Roles"), title="Users & Roles", icon=":material/people:"),
+                st.Page(_wrap_safe(audit_log_view.render, "Audit Log", "adm_audit"), title="Audit Log", icon=":material/history:", url_path="audit-log"),
+                st.Page(_wrap_safe(users_view.render, "Users & Roles", "adm_users"), title="Users & Roles", icon=":material/people:", url_path="users"),
             ],
         }
 
